@@ -186,4 +186,5 @@ export function renderSitemap(site, published) {
     `  <url><loc>${esc(r.loc)}</loc>${r.lastmod ? `<lastmod>${r.lastmod}</lastmod>` : ''}</url>`).join('\n')}\n</urlset>\n`;
 }
 export const renderRobots = (site) =>
-  site.noindex ? 'User-agent: *\nDisallow: /\n' : `User-agent: *\nAllow: /\n\nSitemap: ${site.url}sitemap.xml\n`;
+  site.noindex ? 'User-agent: *\nDisallow: /\n'
+    : `User-agent: *\nAllow: /\nDisallow: ${new URL(site.url).pathname}admin/\n\nSitemap: ${site.url}sitemap.xml\n`; // admin/ = the composer, never for search engines
