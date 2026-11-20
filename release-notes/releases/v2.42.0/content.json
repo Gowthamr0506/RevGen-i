@@ -1,0 +1,248 @@
+{
+  "overview": [
+    "Version 2.42.0 delivers major enhancements with the introduction of two key modules: FTE Production Tracker and AR Chatbot (IVR Calls). These new capabilities are designed to automate productivity tracking, improve workforce performance visibility, and streamline IVR-based claim communication through seamless integration with the Pulse platform. Users will benefit from real-time productivity dashboards, configurable productivity targets, automated activity tracking, efficient IVR claim processing, and centralized access to IVR conversation notes.",
+    "By reducing manual effort and improving operational workflows, this release empowers users to monitor team productivity, manage claim follow-ups, and enhance overall operational efficiency across RevGen-i system."
+  ],
+  "cover": { "src": "images/dash.webp", "alt": "The Productivity Dashboard in RevGen-i, showing team efficiency, claim performance and a user-wise table" },
+  "links": [
+    { "label": "Interactive walkthrough", "url": "interactive-walkthrough.html", "kind": "demo" }
+  ],
+  "items": [
+    {
+      "id": "fte-production-tracker",
+      "category": "new-feature",
+      "title": "FTE Production Tracker Module",
+      "module": "Productivity tracking",
+      "audience": ["Leads & Managers", "FTE users"],
+      "summary": "RevGen-i simplifies productivity monitoring by automatically tracking user activities across Demo, Claim Processing, Coding, and Payment Posting operations. Users can configure common and individual productivity targets, monitor real-time team and individual performance through interactive dashboards, and review historical productivity records with audit tracking, reducing manual effort and improving operational visibility.",
+      "body": [
+        {
+          "type": "list",
+          "items": [
+            "Activity is tracked automatically for the processes assigned to each user.",
+            "Common targets apply to everyone, and individual targets can override them per user.",
+            "Dashboards show real-time performance for teams and for individual users.",
+            "Target history keeps day-wise records and audit logs, with Excel and CSV export."
+          ]
+        },
+        { "type": "heading", "text": "Steps to use the FTE Production Tracker Module" },
+        {
+          "type": "steps",
+          "items": [
+            {
+              "title": "Enable the Productivity Toggle",
+              "audience": "All users",
+              "path": ["Beside the Navigation menu"],
+              "text": "Upon logging into RevGen-i, users shall receive a Productivity Reminder pop-up whenever Productivity Tracking is disabled. Users should enable the Productivity Toggle available beside the Navigation menu to ensure their activities are considered for productivity calculations. The reminder continues to appear every five minutes until the toggle is enabled or the user selects Don’t Show Again.",
+              "note": "Productivity calculations of a user begin only after the Productivity Toggle is enabled.",
+              "images": [
+                { "src": "images/toggle.webp", "alt": "The Productivity Toggle beside the navigation menu in the RevGen-i header", "caption": "The Productivity Toggle" },
+                { "src": "images/reminder.webp", "alt": "The Productivity Reminder pop-up shown over a RevGen-i screen", "caption": "The Productivity Reminder pop-up" }
+              ]
+            },
+            {
+              "title": "Assign processes to each user",
+              "audience": "Leads & Managers",
+              "path": ["Home", "System Settings", "Administrative Settings", "Users"],
+              "text": "Leads and Managers should navigate to Home → System Settings → Administrative Settings → Users and open the Add/Edit User window to assign applicable processes such as Demo, Claim Processing, Coding, and Payment Posting. The selected processes are used by the system to calculate productivity for each user.",
+              "note": "Leads and Managers should mandatorily assign all applicable processes to each user within the account. Productivity shall be calculated only for the assigned processes. Any activity performed under an unassigned process shall not be considered for productivity calculations.",
+              "images": [
+                { "src": "images/users.webp", "alt": "The Add User window with the Process drop-down open, listing Demo, Claim Process, Coding and Payment Posting", "caption": "Add/Edit User window" }
+              ]
+            },
+            {
+              "title": "Set common productivity targets",
+              "audience": "Leads & Managers",
+              "path": ["Home", "System Settings", "Administrative Settings", "Productivity Target"],
+              "text": "Leads and Managers should now navigate to Home → System Settings → Administrative Settings → Productivity Target to configure common productivity targets for all users within the account. Leads and Managers can define Manual and Bulk targets for each process, which serve as the standard benchmarks for productivity calculations.",
+              "note": "The Productivity target setting window is accessible only by the users with privilege access.",
+              "images": [
+                { "src": "images/target.webp", "alt": "The Productivity Target screen with Manual and Bulk targets for each process", "caption": "Productivity Target screen" }
+              ]
+            },
+            {
+              "title": "Review the target history",
+              "audience": "Same screen as Step 3",
+              "path": ["Productivity Target", "Productivity Target History"],
+              "text": "The lower section of the interface displays the Productivity Target History table, allowing users to review day-wise target configurations, audit logs, and historical records. Users can also filter target history by month and export the displayed records in Excel or CSV format.",
+              "note": "The system maintains only one target record per day. Any updates made on the same day modify the existing record instead of creating a new one.",
+              "images": [
+                { "src": "images/history.webp", "alt": "The Productivity Target History table with day-wise records, a month filter and export buttons", "caption": "Productivity Target History table" }
+              ]
+            },
+            {
+              "title": "Configure individual targets",
+              "audience": "Leads & Managers",
+              "path": ["Productivity Target", "Set by User"],
+              "text": "Using the Set by User toggle, Leads and Managers can configure Individual Productivity Targets for selected users. After searching and selecting a user, process-wise Manual and Bulk targets can be configured and activated using the Apply Individual Target checkbox overriding the Common Targets for that user.",
+              "images": [
+                { "src": "images/individual.webp", "alt": "The Individual Target Configuration screen with a selected user and process-wise targets", "caption": "Individual Target Configuration" }
+              ]
+            },
+            {
+              "title": "Individual target history",
+              "audience": "Same screen as Step 5",
+              "path": ["Productivity Target", "Set by User", "Productivity Target History"],
+              "text": "The Individual Target Configuration screen also includes a Productivity Target History table that maintains day-wise records of active Individual Targets. Users can review audit logs, filter historical records by month, and export the displayed information in Excel or CSV formats for reporting purposes.",
+              "images": [
+                { "src": "images/history.webp", "alt": "The Productivity Target History table for individual targets", "caption": "Productivity Target History table" }
+              ]
+            },
+            {
+              "title": "Monitor team performance",
+              "audience": "Leads & Managers",
+              "path": ["Home", "Utilities", "Productivity Dashboard"],
+              "text": "Leads and Managers shall navigate to Home → Utilities → Productivity Dashboard to monitor team performance. The dashboard displays key productivity metrics, user-wise performance, process-wise productivity breakdowns, performance rating legends, search and filter options, and Excel export functionality for comprehensive productivity analysis.",
+              "note": "Users should have the privilege access to view the productivity dashboard. The productivity targets configured by the Leads and Managers, along with the corresponding claims achieved count for each individual user, shall be displayed.",
+              "images": [
+                { "src": "images/dash.webp", "alt": "The Productivity Dashboard with summary tiles, a rating legend and a user-wise performance table", "caption": "Productivity Dashboard" }
+              ]
+            },
+            {
+              "title": "Review your own productivity",
+              "audience": "Normal FTE users",
+              "path": ["Home", "Utilities", "User Productivity Dashboard"],
+              "text": "Normal FTE users shall navigate to Home → Utilities → User Productivity Dashboard to review their individual productivity performance. The dashboard provides My Contribution, productivity achievements against configured targets, process-wise performance details, historical filters, and Excel export functionality.",
+              "note": "The Normal FTE users should also have the privilege to access the User productivity dashboard.",
+              "images": [
+                { "src": "images/userdash.webp", "alt": "The User Productivity Dashboard showing My Contribution and achievements against targets", "caption": "User Productivity Dashboard" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ar-chatbot-ivr-calls",
+      "category": "new-feature",
+      "title": "AR Chatbot Module (IVR Calls)",
+      "module": "IVR · Pulse platform",
+      "audience": ["Managers & Leads", "Users with privilege access"],
+      "summary": "RevGen-i enables users to seamlessly transfer eligible claims to the Pulse IVR platform for automated payer interactions while maintaining visibility of the claims within the system. The module validates required claim mappings, manages IVR call processing, and automatically retrieves summarized conversation notes into RevGen-i, improving claim follow-up efficiency while reducing manual effort.",
+      "body": [
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            "Move eligible claims from a claims bucket to the **IVR Calls** bucket, with remarks.",
+            "Send the validated claims to the **Pulse** IVR platform.",
+            "Leads and Managers trigger the IVR calls in Pulse.",
+            "The summarized call notes return to the claim automatically, under **Notes › IVR calls**."
+          ]
+        },
+        { "type": "callout", "text": "The original claim stays in its source bucket while a copy is worked in IVR Calls." },
+        { "type": "heading", "text": "Steps to use the AR Chatbot Module (IVR calls)" },
+        {
+          "type": "steps",
+          "items": [
+            {
+              "title": "Enable IVR Calls and map carriers",
+              "audience": "Managers & Leads",
+              "path": ["Home", "System Settings", "Administrative Settings", "Accounts", "Carrier Masters"],
+              "text": "The Manager and Leads shall navigate to Home → System Settings → Administrative Settings → Accounts and enable the IVR Calls option. Next, navigate to Carrier Masters and map the appropriate IVR ID for each carrier. The mapped IVR IDs are used by the system while sending claims to the Pulse IVR platform.",
+              "note": "The IVR ID field in Carrier Masters shall remain read-only, and the IVR Calls bucket in the Submitted Claims screen shall not be visible until the IVR Calls option is enabled at the account masters.",
+              "images": [
+                { "src": "images/carrier.webp", "alt": "Carrier Masters with an IVR ID mapped for each carrier", "caption": "Carrier Masters, IVR ID mapping" }
+              ]
+            },
+            {
+              "title": "Move claims to IVR Calls",
+              "audience": "Users with privilege access",
+              "path": ["Any claims bucket", "Move to IVR Calls"],
+              "text": "Users should navigate to any claims bucket, select one or more eligible claims, and click Move to IVR Calls. Enter the required remarks and confirm the action to transfer the selected claims into the IVR Calls bucket for further processing.",
+              "note": "Only users with the privilege access shall be able to view the Move to IVR Calls button at the buckets. The original claim shall remain in the source bucket with same claim status, while a copy shall be created in the IVR Calls bucket. Claims already in IVR Calls bucket cannot be transferred again.",
+              "images": [
+                { "src": "images/move.webp", "alt": "A claims bucket with claims selected and the Move to IVR Calls button visible", "caption": "Move to IVR Calls button in a claims bucket" }
+              ]
+            },
+            {
+              "title": "Review the IVR Calls bucket",
+              "audience": "Users",
+              "path": ["Submitted Claims", "IVR Calls", "Pending"],
+              "text": "Open the IVR Calls bucket to review claims under the Pending status. Users can search claims by payer, select multiple claims, download the claims list, remove and send the claims back to the source bucket if required, or prepare eligible claims for IVR processing.",
+              "images": [
+                { "src": "images/ivrbucket.webp", "alt": "The IVR Calls bucket listing claims with Pending status", "caption": "IVR Calls bucket, Pending status" }
+              ]
+            },
+            {
+              "title": "Send for IVR Call",
+              "audience": "Users",
+              "path": ["IVR Calls", "Send for IVR Call"],
+              "text": [
+                "Select eligible claims through the checkbox and click Send for IVR Call. After entering the mandatory remarks, the system validates the required IVR ID, Ordering Physician NPI, and Ordering Facility Fed ID before transmitting eligible claims to the Pulse IVR platform.",
+                "Now, the claims are successfully transmitted to the Pulse IVR Platform. Leads/Managers shall then log in to the Pulse IVR Platform using their credentials and manually trigger the claims for IVR calling."
+              ],
+              "note": "Only claims belonging to the same carrier can be sent in a single request, and the selection is limited to 20 patients (no limit on the number of claims) at a time. Claims with missing IVR ID, NPI, or Fed ID mappings remain in the IVR Calls bucket, while only eligible claims are sent to the Pulse IVR platform.",
+              "images": [
+                { "src": "images/sent.webp", "alt": "The confirmation that claims were sent to the Pulse platform successfully", "caption": "Claims sent to Pulse platform successfully" }
+              ]
+            },
+            {
+              "title": "Read the IVR notes on the claim",
+              "audience": "Users",
+              "path": ["Claim", "Notes", "IVR calls"],
+              "text": "Once IVR call processing is completed, the summarized conversation notes received from the Pulse IVR platform are automatically attached to the corresponding claim under the Notes section as IVR calls. Users can review these notes to continue claim follow-up activities within RevGen-i.",
+              "images": [
+                { "src": "images/notes.webp", "alt": "A claim with the Notes panel open, showing an IVR note that summarizes the call", "caption": "Claim Notes with IVR call summary" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "patient-enquiry-bucket",
+      "category": "enhancement",
+      "title": "Patient Enquiry Bucket",
+      "module": "Submitted Claims",
+      "summary": "A new Patient Enquiry bucket has been added to the Submitted Claims screen with dedicated statuses for Pending – Patient Calling and Pending – Operations, enabling better tracking and management of claims."
+    },
+    {
+      "id": "remove-responsible-party",
+      "category": "enhancement",
+      "title": "Remove Responsible Party",
+      "module": "Responsible Party popup",
+      "summary": "New Remove action has been added to the Responsible Party popup, allowing users to clear the configured details."
+    },
+    {
+      "id": "payer-search-in-buckets",
+      "category": "enhancement",
+      "title": "Search Based on Payer in Buckets",
+      "module": "All buckets",
+      "summary": "Search functionality has been enhanced to support searching based on the payer across all buckets."
+    },
+    {
+      "id": "service-location-validation",
+      "category": "enhancement",
+      "title": "Service Location and Address Validation",
+      "module": "Service locations",
+      "summary": "Multiple service locations can now be configured for the same Laboratory Name and NPI, provided Address 1 is unique."
+    },
+    {
+      "id": "remittance-review",
+      "category": "enhancement",
+      "title": "Remittance Review",
+      "module": "Remittance review",
+      "summary": "Certain enhancements have been implemented to the Remittance review.",
+      "body": [
+        { "type": "callout", "text": "The details for this enhancement are still being added to this release note." }
+      ]
+    },
+    {
+      "id": "mms-appeal-from-module",
+      "category": "bug-fix",
+      "title": "MMS Appeal from Module",
+      "module": "MMS Appeal",
+      "summary": "Fixed in this release.",
+      "body": [
+        {
+          "type": "list",
+          "items": [
+            "The user-entered details are now displayed in their original format.",
+            "The content spacing from the header has been optimized with improved alignment."
+          ]
+        }
+      ]
+    }
+  ]
+}
