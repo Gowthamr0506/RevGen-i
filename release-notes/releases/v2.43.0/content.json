@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "category": "new-feature",
+      "title": "This is just to test release note sample",
+      "summary": "This is just to test release note sample",
+      "body": [
+        {
+          "type": "image",
+          "src": "images/image-1793598086638.webp",
+          "alt": "This is just to test release note sample"
+        }
+      ]
+    }
+  ]
+}

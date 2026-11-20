@@ -81,6 +81,15 @@
           "h": 1336
         }
       }
+    },
+    {
+      "version": "2.43.0",
+      "date": "2026-11-20",
+      "type": "patch",
+      "status": "published",
+      "featured": false,
+      "title": "This is a sample demo",
+      "summary": "This is just to test release note sample"
     }
   ]
 }
