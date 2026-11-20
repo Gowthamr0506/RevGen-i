@@ -91,7 +91,7 @@ What the workflow does: it runs the tool tests, runs `build` (fails on missing i
 
 Every push to `main` that touches `release-notes/` updates the site automatically. To use another branch, change `branches: [main]` in the workflow. The site root is the portal itself; release pages are at `/releases/vX.Y.Z/` and are safe to share. Optional: set `site.url` in `releases.json` (deployed address, trailing slash) to get canonical links and a sitemap.
 
-The first time you push, GitHub may need to confirm the action versions (`actions/*@v4`, `configure-pages@v5`, `upload-pages-artifact@v3`, `deploy-pages@v4`). Keep them current by enabling Dependabot for GitHub Actions if you like.
+The workflow uses the official GitHub actions (checkout, setup-node, configure-pages, upload-pages-artifact, deploy-pages), each pinned to a major version. GitHub shows deprecation notices as annotations on each run; when you see one, bump the version in the workflow, or enable Dependabot for GitHub Actions to do it for you.
 
 ## Access and visibility
 
