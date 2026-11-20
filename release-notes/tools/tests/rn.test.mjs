@@ -17,7 +17,7 @@ const RN = path.join(REAL, 'tools', 'rn.mjs');
 
 function makePortal(site = { url: '', noindex: false }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-test-'));
-  for (const p of ['templates', 'assets', 'index.html', 'releases/index.html']) fs.cpSync(path.join(REAL, p), path.join(root, p), { recursive: true });
+  for (const p of ['templates', 'assets', 'admin', 'index.html', 'releases/index.html']) fs.cpSync(path.join(REAL, p), path.join(root, p), { recursive: true });
   fs.writeFileSync(path.join(root, 'releases.json'), JSON.stringify({ product: 'RevGen-i', schemaVersion: 1, site, releases: [] }));
   return root;
 }
@@ -142,6 +142,7 @@ test('stage never publishes drafts or source files', () => {
   assert.ok(fs.existsSync(path.join(out, 'releases/v1.0.0/index.html')));
   assert.ok(fs.existsSync(path.join(out, 'releases/v1.0.0/images/a.png')));
   assert.ok(fs.existsSync(path.join(out, '.nojekyll')));
+  for (const f of ['index.html', 'admin.mjs', 'core.mjs', 'admin.css']) assert.ok(fs.existsSync(path.join(out, 'admin', f)), `admin/${f} must be staged`);
   assert.ok(!fs.existsSync(path.join(out, 'releases/v1.1.0')), 'draft folder must not be staged');
   assert.ok(!fs.existsSync(path.join(out, 'releases/v1.0.0/content.json')), 'source content must not be staged');
   assert.ok(!fs.existsSync(path.join(out, 'tools')) && !fs.existsSync(path.join(out, 'templates')));
@@ -149,6 +150,17 @@ test('stage never publishes drafts or source files', () => {
   assert.ok(!staged.includes('Secret upcoming feature') && !staged.includes('"1.1.0"'), 'draft must not appear in the staged releases.json');
   const everything = [...snapshot(out).keys()].map((k) => fs.readFileSync(path.join(out, k), 'latin1')).join('');
   assert.ok(!everything.includes('Secret upcoming feature'));
+});
+
+test('the composer is optional: without the admin/ folder the portal still builds and stages', () => {
+  const root = makePortal();
+  fs.rmSync(path.join(root, 'admin'), { recursive: true });
+  addRelease(root, '1.0.0');
+  assert.equal(rn(root, 'build').code, 0);
+  const out = path.join(root, '_site');
+  const r = rn(root, 'stage', '--out', out);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(fs.existsSync(path.join(out, 'index.html')) && !fs.existsSync(path.join(out, 'admin')));
 });
 
 test('stage refuses to wipe a folder it did not create', () => {
@@ -171,6 +183,7 @@ test('stage writes sitemap and robots only when site.url is set', () => {
   const out = path.join(root, '_site');
   assert.equal(rn(root, 'stage', '--out', out).code, 0);
   assert.match(fs.readFileSync(path.join(out, 'sitemap.xml'), 'utf8'), /https:\/\/example\.github\.io\/RevGen-i\/releases\/v1\.0\.0\//);
+  assert.match(fs.readFileSync(path.join(out, 'robots.txt'), 'utf8'), /Disallow: \/RevGen-i\/admin\//, 'the composer is kept out of search engines');
   assert.match(fs.readFileSync(path.join(out, 'releases/v1.0.0/index.html'), 'utf8'), /<link rel="canonical" href="https:\/\/example\.github\.io\/RevGen-i\/releases\/v1\.0\.0\/">/);
   const plain = makePortal();
   addRelease(plain, '1.0.0');
