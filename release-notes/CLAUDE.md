@@ -119,7 +119,7 @@ releases.json             index + metadata (source of truth); "derived" fields a
 releases/index.html       archive shell
 releases/vX.Y.Z/          index.html (generated) · content.json (source) · images/ · optional demo files
 templates/release.html    page template; templates/partials/{head,header,footer}.html shared markup
-assets/{css,js,images,fonts}/   portal.css, fonts.css, common.js, portal.js, release.js, boot.js, images/logo.svg (the OFFICIAL RevGen-i logo supplied by the owner: use it as-is wherever the brand appears, never redraw or recolour it), favicon.svg (built from the logo's "i"), self-hosted woff2 fonts + OFL licences (never load fonts or scripts from a third party; the CSP and validator forbid it)
+assets/{css,js,images,fonts}/   portal.css, fonts.css, common.js, portal.js, release.js, boot.js, images/logo.svg (the OFFICIAL RevGen-i logo supplied by the owner: use it as-is wherever the brand appears, never redraw or recolour it), images/logo-on-white.svg (the same paths on a white tile, for dark backgrounds such as GitHub dark-mode READMEs), favicon.svg (built from the logo's "i"), self-hosted woff2 fonts + OFL licences (never load fonts or scripts from a third party; the CSP and validator forbid it)
 tools/rn.mjs + lib/       CLI; tools/tests/rn.test.mjs
 _site/                    output of `stage` (git-ignored): exactly what GitHub Pages serves
 ```

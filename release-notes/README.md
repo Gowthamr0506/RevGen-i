@@ -1,4 +1,4 @@
-<img src="assets/images/logo.svg" alt="RevGen-i, powered by Commit Services" width="200">
+<img src="assets/images/logo-on-white.svg" alt="RevGen-i, powered by Commit Services" width="200">
 
 # RevGen-i Release Notes Portal
 
