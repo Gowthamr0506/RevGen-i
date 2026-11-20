@@ -7,7 +7,6 @@
   --blue:#305EFF; --blue-hover:#2950DB; --navy:#0D1A48; --link:#2950DA;
   --wash:rgba(25,40,57,.045); --blue-wash:rgba(48,94,255,.08);
   --ok:#0E7A4F; --warn:#9A5B00;
-  --brand:#1c3faa; --brand-red:#e53935;      /* RevGen-i wordmark colours, as in the app header */
   --r-sm:4px; --r-md:12px;
   --margin:clamp(20px,5.5vw,80px);
   --header-h:64px;
@@ -92,10 +91,7 @@ h3.d{font-size:clamp(20px,1.9vw,24px);line-height:1.15;letter-spacing:-.03em}
 .site-header{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line)}
 .nav-in{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;gap:20px}
 .brand{display:inline-flex;align-items:center;gap:14px;color:var(--ink);min-width:0}
-.logo{display:inline-flex;flex-direction:column;width:fit-content;flex:none}
-.logo-word{font:900 24px/1 "Arial Black","Arial",Helvetica,sans-serif;letter-spacing:-.02em;color:var(--brand);white-space:nowrap}
-.logo-word i{font-style:normal;color:var(--brand-red)}
-.logo-sub{margin-top:3px;padding:1px 4px;background:var(--brand);color:#fff;font:700 6.5px/9px Arial,Helvetica,sans-serif;text-align:center;white-space:nowrap}
+.logo-img{display:block;flex:none;height:36px;width:auto} /* the official RevGen-i logo (assets/images/logo.svg), never redrawn */
 .brand-sep{width:1px;height:28px;background:var(--line)}
 .brand-label{font:400 18px/1 var(--f-display);letter-spacing:-.03em;white-space:nowrap}
 .nav-links{display:flex;align-items:center;gap:4px}
@@ -105,7 +101,7 @@ h3.d{font-size:clamp(20px,1.9vw,24px);line-height:1.15;letter-spacing:-.03em}
 .nav-links a[aria-current="page"]::after{content:"";position:absolute;left:12px;right:12px;bottom:-14px;height:2px;background:var(--blue)}
 .nav-links a{white-space:nowrap}
 @media (max-width:640px){.brand-sep,.brand-label{display:none}.nav-links a{padding:0 8px}}
-@media (max-width:480px){.nav-links a:first-child{display:none}.logo-word{font-size:22px}} /* the hero has its own "latest release" button */
+@media (max-width:480px){.nav-links a:first-child{display:none}.logo-img{height:32px}} /* the hero has its own "latest release" button */
 
 .site-footer{margin-top:clamp(72px,9vw,120px);border-top:1px solid var(--line);padding:40px 0 48px}
 .foot-in{display:flex;flex-wrap:wrap;justify-content:space-between;gap:28px}
