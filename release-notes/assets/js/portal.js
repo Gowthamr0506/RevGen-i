@@ -91,7 +91,10 @@
 
   /* ---------- render ---------- */
   function describe(n, t, filtering, total) {
-    if (!filtering && mode === 'landing') return 'Showing ' + Math.min(state.shown, total) + ' of ' + total + ' earlier release' + (total === 1 ? '' : 's');
+    if (!filtering && mode === 'landing') {
+      return total === 0 ? 'This is the first release. Earlier releases will appear here as they are published.'
+        : 'Showing ' + Math.min(state.shown, total) + ' of ' + total + ' earlier release' + (total === 1 ? '' : 's');
+    }
     const bits = [n + ' release' + (n === 1 ? '' : 's')];
     if (t.length) bits.push('matching “' + state.q.trim() + '”');
     if (state.year) bits.push('in ' + state.year);
@@ -164,6 +167,8 @@
     }
     buildControls();
     render();
+    // Nothing to search or filter yet when there is a single release: hide the controls instead of showing an empty list.
+    if (releases.length <= 1) document.querySelector('.toolbar').hidden = true;
   }).catch((err) => {
     if (el.spot) el.spot.innerHTML = '';
     el.err.hidden = false;
