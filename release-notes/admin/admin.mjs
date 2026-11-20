@@ -199,11 +199,10 @@ async function doPublish() {
     const res = await core.publish({ ...cfg, entry, content, images, message: `Add release ${entry.version}: ${entry.title}`, onProgress: say });
     state.done = true; state.busy = false;
     say('Saved to GitHub.');
-    const live = `${siteBase()}releases/v${entry.version}/`;
     result.className = 'result'; result.hidden = false;
     result.innerHTML = `<p><strong>Saved.</strong> Your release is in the repository (<a href="${esc(res.commitUrl)}" target="_blank" rel="noopener noreferrer">commit ${esc(res.commitSha.slice(0, 7))}</a>).</p><p id="buildLine">Waiting for the website build to start…</p><button class="btn btn-outline btn-sm" type="button" id="another">Add another release</button>`;
     $('#another').addEventListener('click', () => location.reload());
-    watchBuild(res.commitSha, entry, live, cfg);
+    watchBuild(res.commitSha, entry, cfg);
   } catch (e) {
     state.busy = false;
     say('Stopped.');
@@ -213,7 +212,23 @@ async function doPublish() {
   runChecks();
 }
 
-async function watchBuild(sha, entry, liveUrl, cfg) {
+/** The build passed. Only say "Live" once the new page really loads (not just that GitHub says it deployed). */
+async function showLive(line, sha, entry) {
+  const base = siteBase();
+  // The text shows the clean address (good for copying); the click opens it with a fresh-copy marker.
+  const link = `<a href="${esc(core.liveLink(base, entry.version, sha))}" target="_blank" rel="noopener noreferrer">${esc(`${base}releases/v${entry.version}/`)}</a>`;
+  if (new URL(base).origin !== location.origin) { // opened from somewhere else (for example a local preview): cannot check from here
+    line.innerHTML = `The build passed. Open ${link} to see it. <span class="muted">(This page is not on the website itself, so it cannot check for you.)</span>`;
+    return;
+  }
+  line.textContent = 'The build finished. Checking that the new page really loads…';
+  const res = await core.checkLive({ baseUrl: base, version: entry.version, onAttempt: (n) => { if (n > 1) line.textContent = `The build finished. Waiting for GitHub to publish the page (check ${n})…`; } });
+  line.innerHTML = res.ok
+    ? `<strong>Live and checked:</strong> ${link}<br><span class="muted">The new page and the release list both load. If your browser shows an older copy, press Ctrl + F5.</span>`
+    : `The build passed, but the page could not be reached yet (${esc(res.reason)}). GitHub can take a few minutes to publish new pages. Try ${link} again in a minute, and press Ctrl + F5 if it still looks old.`;
+}
+
+async function watchBuild(sha, entry, cfg) {
   const line = $('#buildLine'), actions = `https://github.com/${cfg.owner}/${cfg.repo}/actions`;
   for (let n = 0; n < 60; n++) {
     await new Promise((r) => setTimeout(r, n === 0 ? 4000 : 5000));
@@ -223,9 +238,8 @@ async function watchBuild(sha, entry, liveUrl, cfg) {
     if (!run) continue;
     if (run.status !== 'completed') { line.textContent = 'Building the website (usually under a minute)…'; continue; }
     if (run.conclusion === 'success') {
-      line.innerHTML = entry.status === 'draft'
-        ? 'Saved as a <strong>draft</strong>. It is not on the website.'
-        : `<strong>Live:</strong> <a href="${esc(liveUrl)}" target="_blank" rel="noopener noreferrer">${esc(liveUrl)}</a><br><span class="muted">If you see an older page, refresh in a few minutes: GitHub caches pages for up to 10 minutes.</span>`;
+      if (entry.status === 'draft') line.innerHTML = 'Saved as a <strong>draft</strong>. It is not on the website.';
+      else await showLive(line, sha, entry);
     } else {
       $('#result').className = 'result bad';
       line.innerHTML = `<strong>The website build failed, so the site was not changed.</strong> <a href="${esc(run.url)}" target="_blank" rel="noopener noreferrer">See why</a>. Your files are saved in the repository; ask Claude to fix them, or edit <code>releases/v${esc(entry.version)}/content.json</code> on GitHub.`;

@@ -357,6 +357,33 @@ export async function publish({ fetch: f = globalThis.fetch, token, owner, repo,
   throw new GitHubError(409, 'The repository kept changing while publishing. Try again in a moment.');
 }
 
+/** The release page address plus a short fresh-copy marker, so a browser cannot answer from an older cached copy. */
+export const liveLink = (baseUrl, version, sha) => `${baseUrl}releases/v${version}/?r=${String(sha).slice(0, 7)}`;
+
+/**
+ * After the build succeeds, confirms the website really serves the new release: the release page answers
+ * AND the public release list includes it as published. Bypasses caches. Never throws.
+ * Returns {ok:true, attempts} or {ok:false, attempts, reason}.
+ */
+export async function checkLive({ fetch: f = globalThis.fetch, baseUrl, version, tries = 30, intervalMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onAttempt = () => {} }) {
+  let reason = 'no answer yet';
+  for (let n = 1; n <= tries; n++) {
+    onAttempt(n);
+    try {
+      const page = await f(`${baseUrl}releases/v${version}/`, { cache: 'no-store' });
+      if (!page.ok) reason = `the release page answered ${page.status}`;
+      else {
+        const idx = await f(`${baseUrl}releases.json`, { cache: 'no-store' });
+        if (!idx.ok) reason = `the release list answered ${idx.status}`;
+        else if ((((await idx.json()).releases) || []).some((r) => r.version === version && r.status === 'published')) return { ok: true, attempts: n };
+        else reason = 'the page is up, but the public release list does not include it yet';
+      }
+    } catch { reason = 'the website could not be reached from this page'; }
+    if (n < tries) await sleep(intervalMs);
+  }
+  return { ok: false, attempts: tries, reason };
+}
+
 /** Looks up the workflow run GitHub started for a commit. Returns null until it appears. */
 export async function getBuildRun({ fetch: f = globalThis.fetch, token, owner, repo, sha }) {
   const data = await gh(f, token, 'GET', `/repos/${owner}/${repo}/actions/runs?head_sha=${sha}&per_page=5`, null, 'The build status');
