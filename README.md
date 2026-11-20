@@ -1,4 +1,4 @@
-<p align="center"><img src="release-notes/assets/images/logo.svg" alt="RevGen-i, powered by Commit Services" width="240"></p>
+<p align="center"><img src="release-notes/assets/images/logo-on-white.svg" alt="RevGen-i, powered by Commit Services" width="240"></p>
 
 # RevGen-i release notes
 
