@@ -70,6 +70,20 @@ code{white-space:nowrap}
 .checks .good{border-color:var(--ok)}
 .checks .good::before{content:"OK";background:var(--ok);color:#fff}
 
+.btn-danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn-danger:hover{background:#a42f23;border-color:#a42f23}
+.btn-outline-danger{border-color:var(--bad);color:var(--bad);background:var(--bg)}
+.btn-outline-danger:hover{background:#fff5f4}
+.rel-list{display:flex;flex-direction:column;margin-top:8px;border-top:1px solid var(--line)}
+.rel-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;padding:14px 4px;border-bottom:1px solid var(--line)}
+.rel-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.rel-title{margin-top:4px;font-size:15px;color:var(--ink-2)}
+.rel-empty{padding:16px 4px;color:var(--ink-3)}
+.rel-extra{grid-column:1/-1}
+.confirm{padding:16px 18px;border:1px solid var(--bad);border-radius:var(--r-sm);background:#fff5f4}
+.confirm p+p{margin-top:8px}
+.confirm .actions{margin-top:14px}
+.confirm.bad{background:#fff}
 .progress{display:flex;flex-direction:column;gap:6px;margin-top:16px;padding-left:20px;list-style:decimal;font-size:15px;color:var(--ink-2)}
 .progress li:last-child{font-weight:500;color:var(--ink)}
 .result{margin-top:16px;padding:16px 18px;border:1px solid var(--ok);border-radius:var(--r-sm);background:#f3fbf7;font-size:15px;line-height:1.55}

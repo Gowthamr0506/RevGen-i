@@ -357,6 +357,78 @@ export async function publish({ fetch: f = globalThis.fetch, token, owner, repo,
   throw new GitHubError(409, 'The repository kept changing while publishing. Try again in a moment.');
 }
 
+/* ------------------------------------------------------------------ deleting a release */
+const assertVersion = (v) => { if (!isSemver(v)) throw new GitHubError(422, `"${v}" is not a version number like 2.43.0.`); };
+
+async function readReleaseState(api, branch, dir, version) {
+  const headSha = (await api('GET', `/git/ref/heads/${encodeURI(branch)}`, null, `The branch "${branch}"`)).object.sha;
+  const baseTree = (await api('GET', `/git/commits/${headSha}`, null, 'The latest commit')).tree.sha;
+  const tree = await api('GET', `/git/trees/${baseTree}?recursive=1`, null, 'The repository files');
+  if (tree.truncated) throw new GitHubError(422, 'The repository is too large to list safely from this page. Ask Claude to delete the release instead.');
+  const prefix = `${dir}/releases/v${version}/`; // built only from a validated MAJOR.MINOR.PATCH, so it cannot point anywhere else
+  const files = (tree.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith(prefix)).map((t) => t.path);
+  const idx = await api('GET', `/contents/${dir}/releases.json?ref=${headSha}`, null, `${dir}/releases.json`);
+  const data = JSON.parse(b64ToUtf8(idx.content));
+  return { headSha, baseTree, files, data, entry: (data.releases || []).find((r) => r.version === version) || null };
+}
+
+/** What deleting a release would remove: every file under releases/vX.Y.Z/ and its releases.json entry. Changes nothing. */
+export async function previewDelete({ fetch: f = globalThis.fetch, token, owner, repo, branch = 'main', dir = 'release-notes', version }) {
+  assertVersion(version);
+  const api = (m, p, b, what) => gh(f, token, m, `/repos/${owner}/${repo}${p}`, b, what);
+  const s = await readReleaseState(api, branch, dir, version);
+  if (!s.entry && !s.files.length) throw new GitHubError(404, `Version ${version} was not found in the repository. It may already have been deleted.`);
+  return { version, files: s.files, entry: s.entry };
+}
+
+/**
+ * Deletes one release in a single commit: all files under releases/vX.Y.Z/ plus its releases.json entry.
+ * Other releases are not touched. Retries if someone pushed meanwhile.
+ */
+export async function deleteRelease({ fetch: f = globalThis.fetch, token, owner, repo, branch = 'main', dir = 'release-notes', version, message, onProgress = () => {} }) {
+  assertVersion(version);
+  const api = (m, p, b, what) => gh(f, token, m, `/repos/${owner}/${repo}${p}`, b, what);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress('Reading the repository…');
+    const s = await readReleaseState(api, branch, dir, version);
+    if (!s.entry && !s.files.length) throw new GitHubError(404, `Version ${version} was not found in the repository. It may already have been deleted.`);
+    onProgress(`Removing ${s.files.length} file${s.files.length === 1 ? '' : 's'} and the release list entry…`);
+    s.data.releases = (s.data.releases || []).filter((r) => r.version !== version);
+    const indexBlob = (await api('POST', '/git/blobs', { content: `${JSON.stringify(s.data, null, 2)}\n`, encoding: 'utf-8' }, 'The change')).sha;
+    const tree = [...s.files.map((path) => ({ path, mode: '100644', type: 'blob', sha: null })), { path: `${dir}/releases.json`, mode: '100644', type: 'blob', sha: indexBlob }];
+    const newTree = (await api('POST', '/git/trees', { base_tree: s.baseTree, tree }, 'The change')).sha;
+    const commit = (await api('POST', '/git/commits', { message: message || `Delete release ${version}`, tree: newTree, parents: [s.headSha] }, 'The change')).sha;
+    try {
+      await api('PATCH', `/git/refs/heads/${encodeURI(branch)}`, { sha: commit, force: false }, `The branch "${branch}"`);
+    } catch (e) {
+      if ((e.status === 422 || e.status === 409) && attempt < 2) { onProgress('Someone else just committed; trying again…'); continue; }
+      throw e;
+    }
+    return { commitSha: commit, commitUrl: `https://github.com/${owner}/${repo}/commit/${commit}`, version, removedFiles: s.files.length };
+  }
+  throw new GitHubError(409, 'The repository kept changing while deleting. Try again in a moment.');
+}
+
+/** After a delete has been built: confirms the website no longer serves the release (page gone AND not in the public list). Never throws. */
+export async function checkGone({ fetch: f = globalThis.fetch, baseUrl, version, tries = 30, intervalMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onAttempt = () => {} }) {
+  let reason = 'no answer yet';
+  for (let n = 1; n <= tries; n++) {
+    onAttempt(n);
+    try {
+      const idx = await f(`${baseUrl}releases.json`, { cache: 'no-store' });
+      if (!idx.ok) reason = `the release list answered ${idx.status}`;
+      else if ((((await idx.json()).releases) || []).some((r) => r.version === version)) reason = 'the public release list still includes it';
+      else {
+        const page = await f(`${baseUrl}releases/v${version}/`, { cache: 'no-store' });
+        if (page.status === 404) return { ok: true, attempts: n };
+        reason = `the release page still answers ${page.status}`;
+      }
+    } catch { reason = 'the website could not be reached from this page'; }
+    if (n < tries) await sleep(intervalMs);
+  }
+  return { ok: false, attempts: tries, reason };
+}
+
 /** The release page address plus a short fresh-copy marker, so a browser cannot answer from an older cached copy. */
 export const liveLink = (baseUrl, version, sha) => `${baseUrl}releases/v${version}/?r=${String(sha).slice(0, 7)}`;
 
