@@ -45,7 +45,7 @@ You do not need Claude for a release. Open **`/admin/`** on the site (for exampl
 1. **Connect:** paste the token and press Connect. The page checks access and suggests the next version number.
 2. **Details:** version, date, title, summary, optional overview and links. Choose *Publish* or *Save as a draft*.
 3. **What changed:** add one item per change (category, title, short description, optional details) and attach screenshots. Each screenshot gets alt text and an optional caption. Screenshots are converted to WebP (at most 1800 px wide) in your browser, so files stay small and text stays sharp.
-4. **Review and publish:** the page lists anything to fix in plain words, then saves everything to GitHub as one commit. It then watches the website build and shows the live link when it is done (about a minute).
+4. **Review and publish:** the page lists anything to fix in plain words, then saves everything to GitHub as one commit. It then watches the website build and, once it passes, **checks that the new page and the public release list really load** (bypassing caches) before it says *Live*. The link it shows carries a fresh-copy marker, so your browser cannot answer from an older cached page. This usually takes about a minute; if the page is not reachable yet, the form says so and tells you to retry shortly instead of claiming success.
 
 The *Details* box accepts simple formatting: a blank line starts a paragraph, `- ` makes bullets, `1. ` a numbered list, `## ` a sub-heading, `> ` a note box, `!> ` an important box, `### Step title` a numbered step (text, notes and screenshots below it belong to the step), and `[[image 2]]` places that item's second screenshot. For anything more unusual, open *Advanced* and edit the generated `content.json`.
 
