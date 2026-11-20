@@ -98,6 +98,7 @@ The owner can also add a release without you, from `/admin/`: it commits `releas
 - A release added that way has **no generated `releases/vX/index.html`** and no `derived` block in its `releases.json` entry until `node tools/rn.mjs build` runs (CI builds both on every deploy, so the site is fine). Run `build` and keep the result when you next change anything.
 - `admin/core.mjs` mirrors the key validation rules of `tools/lib/model.mjs`. If you change a rule, content block type or category in one, change the other and run both test files. `tools/tests/composer.test.mjs` proves the composer's output is accepted by the real generator.
 - Never put a token, or code that stores one anywhere except the current tab's `sessionStorage`, into the composer. Its page CSP allows `connect-src` only to `'self'` and `https://api.github.com`; keep it that way.
+- The composer can also **delete** a release (`core.previewDelete` / `deleteRelease` / `checkGone`): one commit that removes every file under `releases/vX.Y.Z/` plus its `releases.json` entry, behind a type-the-version confirmation. It validates the version as MAJOR.MINOR.PATCH before building any path, never touches other releases, and tests prove the real build accepts what is left. Git history still holds the deleted files; do not claim otherwise.
 - You never need the token yourself. Do not ask the owner to paste it into chat.
 
 ## Other tasks
