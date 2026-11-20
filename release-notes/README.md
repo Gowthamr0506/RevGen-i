@@ -1,3 +1,5 @@
+<img src="assets/images/logo.svg" alt="RevGen-i, powered by Commit Services" width="200">
+
 # RevGen-i Release Notes Portal
 
 A static, dependency-free site that lists every RevGen-i release and gives each one a consistent, shareable page with screenshots. It is published with GitHub Pages.
@@ -66,7 +68,7 @@ releases/vX.Y.Z/
   images/                 screenshots for this release
 admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, admin.css)
 templates/                release.html + shared head/header/footer partials (one copy of each)
-assets/                   one stylesheet, a few small scripts, favicon
+assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts
 tools/                    rn.mjs CLI + tests (Node built-ins only)
 ```
 
