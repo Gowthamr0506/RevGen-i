@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All releases · RevGen-i Release Notes</title>
+<meta name="description" content="The complete RevGen-i release archive, grouped by year. Search by version, feature or fix, or filter by year and category.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="RevGen-i Release Notes">
+<meta property="og:title" content="All RevGen-i releases">
+<meta property="og:description" content="The complete RevGen-i release archive, grouped by year.">
+<meta name="twitter:card" content="summary">
+<!--@head-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/tasa-orbiter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/fonts.css">
+<link rel="stylesheet" href="../assets/css/portal.css">
+<script src="../assets/js/boot.js"></script>
+<!--/@head-->
+</head>
+<body class="page-portal page-archive" data-mode="archive" data-root="../">
+<!--@header-->
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap nav-in">
+    <a class="brand" href="../" aria-label="RevGen-i Release Notes, home">
+      <span class="logo" role="img" aria-label="RevGen-i, powered by Commit Services"><span class="logo-word">RevGen<i>-</i>i</span><span class="logo-sub">Powered by Commit Services</span></span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-label">Release Notes</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="../#latest">Latest release</a>
+      <a href="../releases/">All releases</a>
+    </nav>
+  </div>
+</header>
+<!--/@header-->
+
+<main id="main">
+  <section class="hero hero-compact">
+    <div class="wrap"><div class="hero-in">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="../">Release notes</a><span aria-hidden="true">&rsaquo;</span><span aria-current="page">All releases</span></nav>
+      <h1 class="d">All releases</h1>
+      <p class="lead">The complete RevGen-i release archive, newest first. Search by version, feature or fix, or narrow it down by year and category.</p>
+    </div></div>
+  </section>
+
+  <section class="sec sec-tight" id="history" aria-label="Release archive">
+    <div class="wrap">
+      <div class="toolbar" role="search" aria-label="Search and filter releases">
+        <label class="search">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span class="sr">Search releases</span>
+          <input id="q" type="search" placeholder="Search releases, features or fixes" autocomplete="off" spellcheck="false">
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+        <label class="select"><span class="sr">Filter by year</span><select id="year"><option value="">All years</option></select></label>
+        <label class="check"><input type="checkbox" id="featured"><span>Featured only</span></label>
+        <div class="fchips" id="cats" role="group" aria-label="Filter by category"></div>
+      </div>
+
+      <p class="result-count" id="resultCount" role="status" aria-live="polite"></p>
+      <div class="archive" id="results"></div>
+      <div class="empty" id="empty" hidden>
+        <p><strong>No releases match your search.</strong></p>
+        <p>Try a different word, or clear the filters to see every release.</p>
+        <button class="btn btn-outline btn-sm" id="clear" type="button">Clear filters</button>
+      </div>
+      <div class="load-error" id="loadError" hidden></div>
+      <noscript><p class="load-error">The archive needs JavaScript. Each release also has its own page under <code>releases/</code>.</p></noscript>
+    </div>
+  </section>
+</main>
+
+<!--@footer-->
+<footer class="site-footer">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <span class="logo" role="img" aria-label="RevGen-i, powered by Commit Services"><span class="logo-word">RevGen<i>-</i>i</span><span class="logo-sub">Powered by Commit Services</span></span>
+      <p>Release notes for the RevGen-i revenue cycle platform.</p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="../#latest">Latest release</a>
+      <a href="../releases/">All releases</a>
+      <a href="#main">Back to top</a>
+    </nav>
+  </div>
+</footer>
+<!--/@footer-->
+<script src="../assets/js/common.js" defer></script>
+<script src="../assets/js/portal.js" defer></script>
+</body>
+</html>
