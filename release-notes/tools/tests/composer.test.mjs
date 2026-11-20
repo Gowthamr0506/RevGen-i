@@ -187,6 +187,30 @@ test('publish refuses an existing version before uploading anything, and retries
   assert.equal(race.st.head, res.commitSha, 'the second attempt fast-forwarded the branch');
 });
 
+test('checkLive: only says "live" once the page answers AND the public release list includes it', async () => {
+  const base = 'https://x.example/RevGen-i/';
+  const script = [
+    () => ({ ok: false, status: 404 }),                                                       // attempt 1: page not published yet
+    () => ({ ok: true, status: 200 }), () => ({ ok: true, json: async () => ({ releases: [{ version: '2.42.0', status: 'published' }] }) }), // attempt 2: page up, list still old
+    () => ({ ok: true, status: 200 }), () => ({ ok: true, json: async () => ({ releases: [{ version: '2.42.0', status: 'published' }, { version: '2.43.0', status: 'published' }] }) }), // attempt 3: both fine
+  ];
+  const urls = [], waits = [];
+  const f = async (url, init) => { urls.push(url); assert.equal(init.cache, 'no-store', 'caches must be bypassed'); return script.shift()(); };
+  const seen = [];
+  const res = await core.checkLive({ fetch: f, baseUrl: base, version: '2.43.0', tries: 5, intervalMs: 1, sleep: async (ms) => { waits.push(ms); }, onAttempt: (n) => seen.push(n) });
+  assert.deepEqual([res.ok, res.attempts], [true, 3]);
+  assert.deepEqual(seen, [1, 2, 3]);
+  assert.equal(waits.length, 2, 'it waits between attempts, not after success');
+  assert.ok(urls[0].endsWith('/releases/v2.43.0/') && urls.some((u) => u.endsWith('/releases.json')));
+
+  const never = await core.checkLive({ fetch: async () => { throw new Error('offline'); }, baseUrl: base, version: '2.43.0', tries: 3, intervalMs: 1, sleep: async () => {} });
+  assert.deepEqual([never.ok, never.attempts], [false, 3]);
+  assert.match(never.reason, /could not be reached/);
+  const draftOnly = await core.checkLive({ fetch: async (u) => (u.endsWith('releases.json') ? { ok: true, json: async () => ({ releases: [{ version: '2.43.0', status: 'draft' }] }) } : { ok: true }), baseUrl: base, version: '2.43.0', tries: 2, intervalMs: 1, sleep: async () => {} });
+  assert.equal(draftOnly.ok, false, 'a draft in the list does not count as live');
+  assert.equal(core.liveLink(base, '2.43.0', 'abcdef1234567'), 'https://x.example/RevGen-i/releases/v2.43.0/?r=abcdef1');
+});
+
 test('GitHub errors become plain advice; connect() and the build-status lookup work', async () => {
   const v = core.validateRelease(model(), { existingVersions: [] });
   for (const [status, re] of [[401, /mistyped or has expired/], [403, /Contents: Read and write/], [404, /not found, or the token cannot see/]]) {
