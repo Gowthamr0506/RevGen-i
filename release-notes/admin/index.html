@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a release · RevGen-i Release Notes</title>
+<meta name="description" content="Add a release to the RevGen-i release notes with a form instead of editing files.">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/css/fonts.css">
+<link rel="stylesheet" href="../assets/css/portal.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body class="page-admin" data-root="../">
+<!--@header-->
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap nav-in">
+    <a class="brand" href="../" aria-label="RevGen-i Release Notes, home">
+      <span class="logo" role="img" aria-label="RevGen-i, powered by Commit Services"><span class="logo-word">RevGen<i>-</i>i</span><span class="logo-sub">Powered by Commit Services</span></span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-label">Release Notes</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="../#latest">Latest release</a>
+      <a href="../releases/">All releases</a>
+    </nav>
+  </div>
+</header>
+<!--/@header-->
+
+<main id="main">
+  <section class="hero hero-compact">
+    <div class="wrap"><div class="hero-in">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>For the release notes team</p>
+      <h1 class="d">Add a release</h1>
+      <p class="lead">Fill in the form, attach screenshots and publish. The page saves your release to GitHub and the website updates itself about a minute later. Nothing already published is ever overwritten.</p>
+    </div></div>
+  </section>
+
+  <div class="wrap adm">
+
+    <section class="panel" id="connect" aria-labelledby="h-connect">
+      <div class="panel-head"><span class="num" aria-hidden="true">1</span><h2 id="h-connect" class="d">Connect to GitHub</h2></div>
+      <p class="muted">This page needs a GitHub access token to save your release. The token stays in this browser, is only ever sent to <code>api.github.com</code>, and is forgotten when you close the tab.</p>
+      <div class="grid3">
+        <label class="field"><span>Repository owner</span><input id="owner" type="text" autocomplete="off" spellcheck="false" placeholder="your-github-name"></label>
+        <label class="field"><span>Repository</span><input id="repo" type="text" autocomplete="off" spellcheck="false" placeholder="RevGen-i"></label>
+        <label class="field"><span>Branch</span><input id="branch" type="text" autocomplete="off" spellcheck="false" value="main"></label>
+      </div>
+      <label class="field"><span>Access token</span><input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <label class="check-row"><input id="remember" type="checkbox"><span>Keep the token while this browser tab stays open</span></label>
+      <div class="actions"><button class="btn btn-primary" id="connectBtn" type="button">Connect</button><span class="status" id="connectStatus" role="status" aria-live="polite"></span></div>
+      <details class="help">
+        <summary>How do I get a token?</summary>
+        <ol>
+          <li>Sign in to GitHub as the owner of the repository, then open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Settings &rsaquo; Fine-grained tokens &rsaquo; Generate new token</a>.</li>
+          <li>Name it <em>Release notes</em> and choose an expiry of 30 days or less.</li>
+          <li>Under <strong>Repository access</strong> choose <em>Only select repositories</em> and pick this repository.</li>
+          <li>Under <strong>Repository permissions</strong> set <strong>Contents</strong> to <em>Read and write</em>, and <strong>Actions</strong> to <em>Read-only</em> (so this page can show whether the website build worked).</li>
+          <li>Generate the token, copy it and paste it above. Treat it like a password: do not share it. You can delete it on GitHub at any time.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="panel" id="details" aria-labelledby="h-details">
+      <div class="panel-head"><span class="num" aria-hidden="true">2</span><h2 id="h-details" class="d">Release details</h2></div>
+      <div class="grid3">
+        <label class="field"><span>Version</span><input id="version" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="2.43.0"><small class="hint" id="versionHint">Three numbers, e.g. 2.43.0</small></label>
+        <label class="field"><span>Release date</span><input id="date" type="date"></label>
+        <label class="field"><span>Type</span><select id="type"><option value="major">Major release</option><option value="minor" selected>Minor release</option><option value="patch">Patch release</option></select></label>
+      </div>
+      <label class="field"><span>Title</span><input id="title" type="text" maxlength="140" autocomplete="off" placeholder="A short headline, e.g. Claim follow-up reminders"></label>
+      <label class="field"><span>Summary</span><textarea id="summary" rows="2" placeholder="One or two sentences. Shown on the release card and in search results."></textarea></label>
+      <label class="field"><span>Overview (optional)</span><textarea id="overview" rows="4" placeholder="A fuller introduction. Leave a blank line between paragraphs."></textarea></label>
+      <div class="grid2">
+        <label class="field"><span>Status</span>
+          <select id="status"><option value="published">Publish to the website</option><option value="draft">Save as a draft (hidden from the website)</option></select>
+          <small class="hint">A draft is hidden from the website, but its files are still visible in the GitHub repository if the repository is public.</small></label>
+        <label class="field"><span>Search keywords (optional)</span><input id="tags" type="text" autocomplete="off" placeholder="claims, reminders"></label>
+      </div>
+      <label class="check-row"><input id="featured" type="checkbox"><span>Mark this release as featured</span></label>
+      <h3>Links (optional)</h3>
+      <p class="muted small">A demo video, a walkthrough or documentation. Addresses must start with https://</p>
+      <div id="links"></div>
+      <button class="btn btn-outline btn-sm" id="addLink" type="button">Add a link</button>
+    </section>
+
+    <section class="panel" id="changes" aria-labelledby="h-changes">
+      <div class="panel-head"><span class="num" aria-hidden="true">3</span><h2 id="h-changes" class="d">What changed</h2></div>
+      <p class="muted">Add one item for each change and pick its category: <strong>New feature</strong> (it did not exist before), <strong>Enhancement</strong> (an existing feature can do more), <strong>Improvement</strong> (it already worked and now works better) or <strong>Bug fix</strong> (it was wrong and is now right).</p>
+      <label class="check-row"><input id="optimize" type="checkbox" checked><span>Optimize screenshots (convert to WebP, at most 1800 px wide): much smaller files, text stays sharp</span></label>
+      <div id="items"></div>
+      <button class="btn btn-outline" id="addItem" type="button">Add another item</button>
+      <details class="help">
+        <summary>How to write the details</summary>
+        <p class="muted small">The <em>Details</em> box turns plain text into formatted content:</p>
+        <ul class="syntax">
+          <li>A <strong>blank line</strong> starts a new paragraph.</li>
+          <li><code>- text</code> makes a bullet and <code>1. text</code> a numbered list.</li>
+          <li><code>## Heading</code> adds a sub-heading.</li>
+          <li><code>&gt; text</code> makes a note box and <code>!&gt; text</code> an important box.</li>
+          <li><code>### Step title</code> starts a numbered step. The text, notes and screenshots below it belong to that step.</li>
+          <li><code>[[image 2]]</code> on its own line places this item's screenshot number 2 right there. Screenshots you do not place appear after the text.</li>
+          <li>Inside any text: <code>**bold**</code>, <code>`code`</code> and <code>[label](https://example.com)</code>.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="panel" id="publish" aria-labelledby="h-publish">
+      <div class="panel-head"><span class="num" aria-hidden="true">4</span><h2 id="h-publish" class="d">Review and publish</h2></div>
+      <div class="summary-box" id="summaryBox" aria-live="polite"></div>
+      <ul class="checks" id="checks" aria-live="polite"></ul>
+      <details class="help">
+        <summary>Advanced: view or edit the generated content.json</summary>
+        <textarea id="json" rows="14" readonly spellcheck="false" aria-label="Generated content.json"></textarea>
+        <label class="check-row"><input id="editJson" type="checkbox"><span>Edit the JSON by hand (the form above then stops updating it)</span></label>
+        <button class="btn btn-outline btn-sm" id="resetJson" type="button" hidden>Reset from the form</button>
+      </details>
+      <div class="actions"><button class="btn btn-primary" id="publishBtn" type="button" disabled>Publish release</button><span class="status" id="publishHint"></span></div>
+      <ol class="progress" id="progress" aria-live="polite" hidden></ol>
+      <div class="result" id="result" role="status" hidden></div>
+    </section>
+
+  </div>
+</main>
+
+<!--@footer-->
+<footer class="site-footer">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <span class="logo" role="img" aria-label="RevGen-i, powered by Commit Services"><span class="logo-word">RevGen<i>-</i>i</span><span class="logo-sub">Powered by Commit Services</span></span>
+      <p>Release notes for the RevGen-i revenue cycle platform.</p>
+    </div>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="../#latest">Latest release</a>
+      <a href="../releases/">All releases</a>
+      <a href="#main">Back to top</a>
+    </nav>
+  </div>
+</footer>
+<!--/@footer-->
+<script type="module" src="admin.mjs"></script>
+</body>
+</html>
