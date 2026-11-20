@@ -40,7 +40,7 @@ jobs:
 
       # The tooling has its own tests (no dependencies to install).
       - name: Test the release tooling
-        run: node --test release-notes/tools/tests/rn.test.mjs
+        run: node --test release-notes/tools/tests/rn.test.mjs release-notes/tools/tests/composer.test.mjs
 
       # Fails the run on: missing images, broken links, invalid metadata, duplicate versions, wrong capitalisation.
       # Regenerates the release pages and releases.json, so the deployed site is always in sync with the data.
