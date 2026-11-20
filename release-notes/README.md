@@ -33,6 +33,29 @@ What Claude runs (you can run these yourself; Node 20 or newer):
 
 Open the pages through `serve`, not by double-clicking `index.html`: browsers block a page from reading `releases.json` from disk. (Individual release pages are static and read fine from disk; the live site is unaffected.)
 
+## Add a release yourself: the composer page
+
+You do not need Claude for a release. Open **`/admin/`** on the site (for example `https://<owner>.github.io/<repo>/admin/`). It is not linked from the public pages and search engines are told to skip it.
+
+**One-time setup (about 2 minutes):** create a GitHub token for this repository only. On the page, open *How do I get a token?* for the exact clicks: Settings > Fine-grained tokens > only this repository > **Contents: Read and write** (and **Actions: Read-only**) > expiry 30 days or less.
+
+**Each release:**
+1. **Connect:** paste the token and press Connect. The page checks access and suggests the next version number.
+2. **Details:** version, date, title, summary, optional overview and links. Choose *Publish* or *Save as a draft*.
+3. **What changed:** add one item per change (category, title, short description, optional details) and attach screenshots. Each screenshot gets alt text and an optional caption. Screenshots are converted to WebP (at most 1800 px wide) in your browser, so files stay small and text stays sharp.
+4. **Review and publish:** the page lists anything to fix in plain words, then saves everything to GitHub as one commit. It then watches the website build and shows the live link when it is done (about a minute).
+
+The *Details* box accepts simple formatting: a blank line starts a paragraph, `- ` makes bullets, `1. ` a numbered list, `## ` a sub-heading, `> ` a note box, `!> ` an important box, `### Step title` a numbered step (text, notes and screenshots below it belong to the step), and `[[image 2]]` places that item's second screenshot. For anything more unusual, open *Advanced* and edit the generated `content.json`.
+
+What it will not do, on purpose:
+- **It never overwrites a release.** A version that already exists is refused; every release is added as new files. To correct a published release, ask Claude or edit `releases/vX/content.json` on GitHub.
+- **There is no live preview.** The site is built by GitHub after you publish. Use *Save as a draft* for work in progress (note that drafts are hidden from the website but their files are visible in the repository if it is public).
+- **If the website build fails** (for example a content mistake the page could not detect), the site stays as it was and the page links to the failing run. Your files are saved in the repository.
+
+Security: the token is kept in this browser tab only (and only if you tick *Keep the token*), is sent only to `api.github.com`, and the page loads no third-party code (a strict Content-Security-Policy enforces this). Anyone can open the page, but nobody can publish without a token that has write access to your repository. Use a fine-grained token limited to this repository, with a short expiry, and delete it on GitHub when you no longer need it.
+
+The logic lives in `admin/core.mjs` and is tested against a simulated GitHub, including a check that everything it commits builds with the real generator (`tools/tests/composer.test.mjs`). The generated release page (`releases/vX/index.html`) is created by the deploy workflow, so a release added this way does not contain it in the repository until someone runs `node tools/rn.mjs build` and commits; the website does not need it.
+
 ## How it fits together
 
 ```
@@ -41,6 +64,7 @@ releases/vX.Y.Z/
   content.json            the release's content (structured; validated)
   index.html              generated from templates/release.html (do not edit by hand)
   images/                 screenshots for this release
+admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, admin.css)
 templates/                release.html + shared head/header/footer partials (one copy of each)
 assets/                   one stylesheet, a few small scripts, favicon
 tools/                    rn.mjs CLI + tests (Node built-ins only)

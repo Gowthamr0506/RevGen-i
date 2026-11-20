@@ -91,6 +91,15 @@ Rules the validator enforces: every image needs `alt` (or `"decorative": true`),
 - Put how-to detail in a `steps` block, one screenshot per step where the owner supplied one. Put rules and warnings in `callout`s.
 - No screenshots is fine: omit `images`. Never add placeholder images.
 
+## The composer page (`admin/`)
+
+The owner can also add a release without you, from `/admin/`: it commits `releases/vX/content.json`, images and a `releases.json` entry to GitHub in one commit using a token the owner pastes in (see README, "the composer page"). Things to know when you work in this repo afterwards:
+
+- A release added that way has **no generated `releases/vX/index.html`** and no `derived` block in its `releases.json` entry until `node tools/rn.mjs build` runs (CI builds both on every deploy, so the site is fine). Run `build` and keep the result when you next change anything.
+- `admin/core.mjs` mirrors the key validation rules of `tools/lib/model.mjs`. If you change a rule, content block type or category in one, change the other and run both test files. `tools/tests/composer.test.mjs` proves the composer's output is accepted by the real generator.
+- Never put a token, or code that stores one anywhere except the current tab's `sessionStorage`, into the composer. Its page CSP allows `connect-src` only to `'self'` and `https://api.github.com`; keep it that way.
+- You never need the token yourself. Do not ask the owner to paste it into chat.
+
 ## Other tasks
 
 - **Edit an existing release:** only if asked. Edit its `content.json` (or authored fields in `releases.json`), run `build`, say exactly what changed.
@@ -104,6 +113,7 @@ Rules the validator enforces: every image needs `alt` (or `"decorative": true`),
 ## Layout
 
 ```
+admin/                    manual release composer (index.html + admin.mjs UI + core.mjs logic + admin.css); lets the owner add a release from a form
 index.html                landing (shell; rendered from releases.json by assets/js/portal.js)
 releases.json             index + metadata (source of truth); "derived" fields are generated
 releases/index.html       archive shell
