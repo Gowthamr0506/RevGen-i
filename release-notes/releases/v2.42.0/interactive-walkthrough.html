@@ -108,6 +108,7 @@ h4.d{font-size:20px;line-height:1.2;letter-spacing:-.02em}
 .brand:hover .brand-mark{transform:rotate(90deg)}
 .brand-mark::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--blue)}
 .brand-name{font:400 20px/1 var(--f-display);letter-spacing:-.04em}
+.brand-logo{display:block;height:36px;width:auto}
 .ver{height:24px;display:inline-flex;align-items:center;padding:0 8px;border:1px solid var(--line);border-radius:var(--r-sm);font:500 12px/1 var(--f-label);color:var(--ink-3)}
 .nav-links{margin-left:auto;display:flex;align-items:center;gap:4px}
 .nav-links a{position:relative;height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:var(--r-sm);font:500 14px/1 var(--f-label);letter-spacing:-.01em;color:var(--ink-3);transition:color .2s,background .2s}
@@ -716,8 +717,7 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 4px 10px -2px rgba(13,26,72
 <header class="nav">
   <div class="wrap nav-in">
     <a class="brand" href="#top" aria-label="RevGen-i release notes, top of page">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">RevGen-i</span>
+      <img class="brand-logo" src="../../assets/images/logo.svg" width="112" height="36" alt="RevGen-i, powered by Commit Services">
     </a>
     <span class="ver">v2.42.0</span>
     <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="navLinks">Sections</button>
@@ -1048,7 +1048,7 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 4px 10px -2px rgba(13,26,72
 <footer class="foot">
   <div class="wrap foot-in">
     <div>
-      <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"></span><span class="brand-name">RevGen-i</span></a>
+      <a class="brand" href="#top"><img class="brand-logo" src="../../assets/images/logo.svg" width="112" height="36" alt="RevGen-i, powered by Commit Services"></a>
       <p>Release Notes · Version 2.42.0 · August 2026 · Powered by Commit Services</p>
     </div>
     <div class="foot-links">
