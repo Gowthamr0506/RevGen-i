@@ -6,6 +6,7 @@ import {
   formatBytes, isIsoDate, isSafeUrl, normalizeVersion, readText, releaseOrder, slugify, typeFromVersion,
 } from './util.mjs';
 import { readImageInfo } from './images.mjs';
+import { itemId } from '../../assets/js/render-shared.mjs';
 
 export const SECTION_IDS = ['overview', 'new-features', 'enhancements-improvements', 'bug-fixes'];
 const AUTHORED = ['version', 'date', 'type', 'status', 'featured', 'sample', 'page', 'title', 'summary', 'tags', 'derived'];
@@ -24,7 +25,7 @@ export class Report {
   get warnings() { return this.items.filter((i) => i.level === 'warning'); }
 }
 
-export const itemId = (item) => item.id || slugify(item.title || '');
+export { itemId };
 export const releaseDir = (version) => `releases/v${version}`;
 
 /** Every image referenced by a content file, with a human-readable location. */

@@ -2,19 +2,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CATEGORIES, TYPES, esc, formatDate, inline, isSafeUrl, plain, slugify } from '../../assets/js/render-shared.mjs';
+
+// The text helpers below are shared with the browser (the composer's preview), so they live in one file.
+export { CATEGORIES, TYPES, esc, formatDate, inline, isSafeUrl, plain, slugify };
 
 export const TOOLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_ROOT = path.resolve(TOOLS_DIR, '..');
 
-/** Release categories, in display order. `plural` is the section / filter label. */
-export const CATEGORIES = [
-  { id: 'new-feature', label: 'New feature', plural: 'New Features' },
-  { id: 'enhancement', label: 'Enhancement', plural: 'Enhancements' },
-  { id: 'improvement', label: 'Improvement', plural: 'Improvements' },
-  { id: 'bug-fix', label: 'Bug fix', plural: 'Bug Fixes' },
-];
 export const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
-export const TYPES = { major: 'Major release', minor: 'Minor release', patch: 'Patch release' };
 export const STATUSES = ['published', 'draft'];
 export const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif']);
 export const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -55,40 +51,10 @@ export function isIsoDate(s) {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 }
-export const formatDate = (iso) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 export const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-
-/* ---------- text ---------- */
-export const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-export const slugify = (s) =>
-  String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
-
-const SAFE_URL = /^(https?:\/\/|mailto:|#|\/|\.\/|\.\.\/|[A-Za-z0-9_-][^:]*$)/;
-export const isSafeUrl = (u) => typeof u === 'string' && u.trim() !== '' && SAFE_URL.test(u.trim()) && !/^\s*(javascript|data|vbscript):/i.test(u);
-
-/** Tiny inline formatter for content strings: `code`, **bold**, [label](url). Everything else is escaped. */
-export function inline(text) {
-  let s = esc(text);
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (m, label, url) => {
-    const raw = url.replace(/&amp;/g, '&');
-    if (!isSafeUrl(raw)) return label;
-    const external = /^https?:\/\//i.test(raw);
-    return `<a href="${url}"${external ? ' rel="noopener noreferrer"' : ''}>${label}</a>`;
-  });
-  return s;
-}
-/** Plain-text version of inline markup (for attributes and search). */
-export const plain = (text) =>
-  String(text ?? '').replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\[([^\]]+)\]\((?:[^()\s]|\([^()\s]*\))+\)/g, '$1');
 
 /* ---------- filesystem checks that behave like GitHub Pages (Linux, case-sensitive) ---------- */
 const dirCache = new Map();
