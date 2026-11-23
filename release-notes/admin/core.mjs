@@ -409,6 +409,73 @@ export async function deleteRelease({ fetch: f = globalThis.fetch, token, owner,
   throw new GitHubError(409, 'The repository kept changing while deleting. Try again in a moment.');
 }
 
+/* ------------------------------------------------------------------ publishing a draft / unpublishing */
+/** Why a draft cannot be published yet (same rules the website build enforces). Empty array = safe to publish. */
+async function publishProblems(api, dir, version, s) {
+  const errors = [];
+  const entry = s.entry, prefix = `${dir}/releases/v${version}/`;
+  if (!isText(entry.title)) errors.push('The release has no title.');
+  if (!isText(entry.summary)) errors.push('The release has no summary. A published release needs one (one or two sentences).');
+  if (entry.page === 'custom') {
+    if (!s.files.includes(`${prefix}index.html`)) errors.push('Its custom page (index.html) is missing.');
+    return errors;
+  }
+  let content = null;
+  try { content = JSON.parse(b64ToUtf8((await api('GET', `/contents/${prefix}content.json?ref=${s.headSha}`, null, 'content.json')).content)); }
+  catch (e) { if (!(e instanceof GitHubError) || e.status !== 404) errors.push('Its content.json could not be read.'); }
+  if (!content) { if (!errors.some((x) => /content\.json/.test(x))) errors.push('Its content.json is missing.'); return errors; }
+  const names = new Set(s.files.filter((p) => p.startsWith(`${prefix}images/`)).map((p) => p.slice(`${prefix}images/`.length)).filter((n) => !n.includes('/')));
+  errors.push(...validateContent(content, names, { published: true }).errors);
+  return errors;
+}
+
+/** Looks at one release and says whether it can move to `to` ("published" or "draft"). Changes nothing. */
+export async function previewStatusChange({ fetch: f = globalThis.fetch, token, owner, repo, branch = 'main', dir = 'release-notes', version, to }) {
+  assertVersion(version);
+  if (!['published', 'draft'].includes(to)) throw new GitHubError(422, 'The new status must be "published" or "draft".');
+  const api = (m, p, b, what) => gh(f, token, m, `/repos/${owner}/${repo}${p}`, b, what);
+  const s = await readReleaseState(api, branch, dir, version);
+  if (!s.entry) throw new GitHubError(404, `Version ${version} is not in the release list.`);
+  let errors = [];
+  if (s.entry.status === to) errors = [to === 'published' ? `v${version} is already published.` : `v${version} is already a draft.`];
+  else if (to === 'published') errors = await publishProblems(api, dir, version, s);
+  return { version, from: s.entry.status, to, entry: s.entry, errors };
+}
+
+/**
+ * Publishes a draft or unpublishes a release by changing its status in releases.json: one commit, one file.
+ * Publishing is refused (with a list of reasons) if the release is not complete enough for the website build.
+ */
+export async function setReleaseStatus({ fetch: f = globalThis.fetch, token, owner, repo, branch = 'main', dir = 'release-notes', version, to, message, onProgress = () => {} }) {
+  assertVersion(version);
+  if (!['published', 'draft'].includes(to)) throw new GitHubError(422, 'The new status must be "published" or "draft".');
+  const api = (m, p, b, what) => gh(f, token, m, `/repos/${owner}/${repo}${p}`, b, what);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    onProgress('Reading the repository…');
+    const s = await readReleaseState(api, branch, dir, version);
+    if (!s.entry) throw new GitHubError(404, `Version ${version} is not in the release list.`);
+    if (s.entry.status === to) throw new GitHubError(409, to === 'published' ? `v${version} is already published.` : `v${version} is already a draft.`);
+    if (to === 'published') {
+      onProgress('Checking the release is complete…');
+      const errors = await publishProblems(api, dir, version, s);
+      if (errors.length) { const err = new GitHubError(422, `v${version} cannot be published yet: ${errors.join(' ')}`); err.errors = errors; throw err; }
+    }
+    onProgress(to === 'published' ? 'Publishing…' : 'Unpublishing…');
+    s.entry.status = to;
+    const indexBlob = (await api('POST', '/git/blobs', { content: `${JSON.stringify(s.data, null, 2)}\n`, encoding: 'utf-8' }, 'The change')).sha;
+    const newTree = (await api('POST', '/git/trees', { base_tree: s.baseTree, tree: [{ path: `${dir}/releases.json`, mode: '100644', type: 'blob', sha: indexBlob }] }, 'The change')).sha;
+    const commit = (await api('POST', '/git/commits', { message: message || `${to === 'published' ? 'Publish' : 'Unpublish'} release ${version}`, tree: newTree, parents: [s.headSha] }, 'The change')).sha;
+    try {
+      await api('PATCH', `/git/refs/heads/${encodeURI(branch)}`, { sha: commit, force: false }, `The branch "${branch}"`);
+    } catch (e) {
+      if ((e.status === 422 || e.status === 409) && attempt < 2) { onProgress('Someone else just committed; trying again…'); continue; }
+      throw e;
+    }
+    return { commitSha: commit, commitUrl: `https://github.com/${owner}/${repo}/commit/${commit}`, version, status: to };
+  }
+  throw new GitHubError(409, 'The repository kept changing while saving. Try again in a moment.');
+}
+
 /** After a delete has been built: confirms the website no longer serves the release (page gone AND not in the public list). Never throws. */
 export async function checkGone({ fetch: f = globalThis.fetch, baseUrl, version, tries = 30, intervalMs = 3000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), onAttempt = () => {} }) {
   let reason = 'no answer yet';

@@ -13,7 +13,7 @@ const store = {
 const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.avif': 'image/avif' };
 
-const state = { conn: null, items: [], links: [], typeTouched: false, jsonOverride: false, busy: false, done: false, deleting: false, ready: null };
+const state = { conn: null, items: [], links: [], typeTouched: false, jsonOverride: false, busy: false, done: false, managing: false, ready: null };
 const newItem = () => ({ category: '', title: '', module: '', audience: '', summary: '', body: '', images: [] });
 
 /* ------------------------------------------------------------------ small UI helpers */
@@ -258,31 +258,39 @@ async function watchBuild(sha, entry, cfg) {
   }
 }
 
-/* ------------------------------------------------------------------ manage releases: delete */
+/* ------------------------------------------------------------------ manage releases: publish, unpublish, delete */
 const relOrder = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || core.compareVersions(b.version, a.version);
+const typedMatches = (typed, version) => typed.trim().replace(/^v/i, '') === version; // "2.43.0" or "v2.43.0"
 
 function renderManage() {
   const ul = $('#relList');
   if (!state.conn) { ul.innerHTML = '<li class="rel-empty">Connect to GitHub in step 1 to see your releases.</li>'; return; }
   const list = [...state.conn.releases].sort(relOrder);
   if (!list.length) { ul.innerHTML = '<li class="rel-empty">There are no releases in the repository.</li>'; return; }
-  ul.innerHTML = list.map((r) => `
+  ul.innerHTML = list.map((r) => {
+    const draft = r.status === 'draft';
+    return `
     <li class="rel-row" data-v="${esc(r.version)}">
       <div class="rel-main">
         <div class="rel-line"><strong>v${esc(r.version)}</strong><span class="muted">${esc(r.date || '')}</span>
-          <span class="chip ${r.status === 'draft' ? 'draft' : 'featured'}">${r.status === 'draft' ? 'Draft' : 'Published'}</span>${r.sample ? '<span class="chip sample">Sample</span>' : ''}</div>
+          <span class="chip ${draft ? 'draft' : 'featured'}">${draft ? 'Draft' : 'Published'}</span>${r.sample ? '<span class="chip sample">Sample</span>' : ''}</div>
         <div class="rel-title">${esc(r.title || '')}</div>
       </div>
-      <button type="button" class="btn btn-outline-danger btn-sm" data-act="ask-delete">Delete…</button>
+      <div class="rel-actions">
+        <button type="button" class="btn btn-outline btn-sm" data-act="ask-status" data-to="${draft ? 'published' : 'draft'}">${draft ? 'Publish' : 'Unpublish'}</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-act="ask-delete">Delete…</button>
+      </div>
       <div class="rel-extra" hidden></div>
-    </li>`).join('');
+    </li>`;
+  }).join('');
 }
 
-const typedMatches = (typed, version) => typed.trim().replace(/^v/i, '') === version; // "2.43.0" or "v2.43.0"
 const closeConfirms = () => document.querySelectorAll('#relList .rel-extra').forEach((x) => { x.hidden = true; x.innerHTML = ''; });
+const closeBtn = '<button type="button" class="btn btn-outline btn-sm" data-act="cancel-confirm">Close</button>';
+const problemList = (items) => `<ul class="list">${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
 
 async function askDelete(li) {
-  if (state.deleting) return;
+  if (state.managing) return;
   const v = li.dataset.v, extra = li.querySelector('.rel-extra'), cfg = getCfg();
   closeConfirms();
   extra.hidden = false;
@@ -295,59 +303,106 @@ async function askDelete(li) {
       <div class="confirm">
         <p><strong>Delete v${esc(v)}${rel.title ? ` “${esc(rel.title)}”` : ''}?</strong></p>
         <p>This removes the release page${p.files.length ? `, its ${p.files.length} file${p.files.length === 1 ? '' : 's'} (content and screenshots)` : ''} and its entry in the release list. ${live ? 'The website updates about a minute later and the release disappears from it.' : 'It is a draft, so the website itself does not change.'}</p>
-        <p class="muted small">This cannot be undone from this page.${state.conn.isPrivate ? '' : ' The repository is public, so earlier versions of these files stay visible in its history.'}</p>
+        <p class="muted small">This cannot be undone from this page.${state.conn.isPrivate ? '' : ' The repository is public, so earlier versions of these files stay visible in its history.'}${live ? ' If you only want to hide it for now, use Unpublish instead.' : ''}</p>
         <label class="field"><span>Type <code>${esc(v)}</code> to confirm</span><input type="text" data-confirm autocomplete="off" spellcheck="false"></label>
-        <div class="actions"><button type="button" class="btn btn-danger btn-sm" data-act="do-delete" disabled>Delete permanently</button><button type="button" class="btn btn-outline btn-sm" data-act="cancel-delete">Cancel</button></div>
+        <div class="actions"><button type="button" class="btn btn-danger btn-sm" data-act="do-delete" disabled>Delete permanently</button><button type="button" class="btn btn-outline btn-sm" data-act="cancel-confirm">Cancel</button></div>
       </div>`;
     extra.querySelector('[data-confirm]').focus();
   } catch (e) {
-    extra.innerHTML = `<div class="confirm bad"><p>${esc(e.message || String(e))}</p><button type="button" class="btn btn-outline btn-sm" data-act="cancel-delete">Close</button></div>`;
+    extra.innerHTML = `<div class="confirm bad"><p>${esc(e.message || String(e))}</p>${closeBtn}</div>`;
   }
+}
+
+async function askStatus(li, to) {
+  if (state.managing) return;
+  const v = li.dataset.v, extra = li.querySelector('.rel-extra'), cfg = getCfg();
+  closeConfirms();
+  extra.hidden = false;
+  extra.innerHTML = `<p class="muted">${to === 'published' ? 'Checking the release is complete…' : 'Checking…'}</p>`;
+  try {
+    const p = await core.previewStatusChange({ ...cfg, version: v, to });
+    const rel = state.conn.releases.find((r) => r.version === v) || {};
+    const name = `v${esc(v)}${rel.title ? ` “${esc(rel.title)}”` : ''}`;
+    if (p.errors.length) {
+      extra.innerHTML = `<div class="confirm bad"><p><strong>${to === 'published' ? `${name} cannot be published yet` : 'Nothing to change'}</strong></p>${problemList(p.errors)}${to === 'published' ? '<p class="muted small">Fix this (ask Claude, or edit the files on GitHub) and try again.</p>' : ''}${closeBtn}</div>`;
+      return;
+    }
+    extra.innerHTML = to === 'published'
+      ? `<div class="confirm neutral"><p><strong>Publish ${name}?</strong></p><p>It passes the same checks the website build uses. About a minute after you confirm, it appears on the website.</p><div class="actions"><button type="button" class="btn btn-primary btn-sm" data-act="do-status" data-to="published">Publish now</button><button type="button" class="btn btn-outline btn-sm" data-act="cancel-confirm">Cancel</button></div></div>`
+      : `<div class="confirm neutral"><p><strong>Unpublish ${name}?</strong></p><p>About a minute after you confirm, it disappears from the website. Its files stay in the repository as a draft, and you can publish it again here at any time.</p><div class="actions"><button type="button" class="btn btn-primary btn-sm" data-act="do-status" data-to="draft">Unpublish</button><button type="button" class="btn btn-outline btn-sm" data-act="cancel-confirm">Cancel</button></div></div>`;
+  } catch (e) {
+    extra.innerHTML = `<div class="confirm bad"><p>${esc(e.message || String(e))}</p>${closeBtn}</div>`;
+  }
+}
+
+/* shared by delete / publish / unpublish: progress list + result box */
+function beginManage() {
+  state.managing = true;
+  closeConfirms();
+  const prog = $('#mgProgress'), result = $('#mgResult');
+  prog.hidden = false; prog.innerHTML = ''; result.hidden = true;
+  return { result, say: (t) => { const item = document.createElement('li'); item.textContent = t; prog.appendChild(item); } };
+}
+function failManage(m, e, headline) {
+  state.managing = false;
+  m.say('Stopped.');
+  m.result.className = 'result bad'; m.result.hidden = false;
+  m.result.innerHTML = `<p><strong>${esc(headline)}</strong></p>${e.errors && e.errors.length ? problemList(e.errors) : `<p>${esc(e.message || String(e))}</p>`}`;
+}
+function okManage(m, res, headline) {
+  state.managing = false;
+  m.say('Saved to GitHub.');
+  m.result.className = 'result'; m.result.hidden = false;
+  m.result.innerHTML = `<p><strong>${esc(headline)}</strong> The change is in the repository (<a href="${esc(res.commitUrl)}" target="_blank" rel="noopener noreferrer">commit ${esc(res.commitSha.slice(0, 7))}</a>).</p><p id="mgLine">Waiting for the website build to start…</p>`;
 }
 
 async function doDelete(li) {
   const v = li.dataset.v, cfg = getCfg(), typed = li.querySelector('[data-confirm]');
-  if (state.deleting || !typed || !typedMatches(typed.value, v)) return;
-  state.deleting = true;
+  if (state.managing || !typed || !typedMatches(typed.value, v)) return;
   const rel = state.conn.releases.find((r) => r.version === v) || {};
-  closeConfirms();
-  const prog = $('#delProgress'), result = $('#delResult');
-  prog.hidden = false; prog.innerHTML = ''; result.hidden = true;
-  const say = (t) => { const item = document.createElement('li'); item.textContent = t; prog.appendChild(item); };
+  const m = beginManage();
   try {
-    const res = await core.deleteRelease({ ...cfg, version: v, message: `Delete release ${v}${rel.title ? `: ${rel.title}` : ''}`, onProgress: say });
-    say('Saved to GitHub.');
+    const res = await core.deleteRelease({ ...cfg, version: v, message: `Delete release ${v}${rel.title ? `: ${rel.title}` : ''}`, onProgress: m.say });
     state.conn.releases = state.conn.releases.filter((r) => r.version !== v);
     renderManage(); runChecks();
-    result.className = 'result'; result.hidden = false;
-    result.innerHTML = `<p><strong>Deleted v${esc(v)}.</strong> The change is in the repository (<a href="${esc(res.commitUrl)}" target="_blank" rel="noopener noreferrer">commit ${esc(res.commitSha.slice(0, 7))}</a>).</p><p id="delLine">Waiting for the website build to start…</p>`;
-    state.deleting = false;
-    watchDelete(res.commitSha, v, rel.status !== 'draft', cfg);
-  } catch (e) {
-    state.deleting = false;
-    say('Stopped.');
-    result.className = 'result bad'; result.hidden = false;
-    result.innerHTML = `<p><strong>Nothing was deleted.</strong></p><p>${esc(e.message || String(e))}</p>`;
-  }
+    okManage(m, res, `Deleted v${v}.`);
+    watchManage(res.commitSha, v, rel.status === 'draft' ? 'draft-only' : 'gone', cfg);
+  } catch (e) { failManage(m, e, 'Nothing was deleted.'); }
 }
 
-async function watchDelete(sha, version, wasPublished, cfg) {
-  const line = $('#delLine');
+async function doStatus(li, to) {
+  const v = li.dataset.v, cfg = getCfg();
+  if (state.managing) return;
+  const m = beginManage();
+  try {
+    const res = await core.setReleaseStatus({ ...cfg, version: v, to, onProgress: m.say });
+    const rel = state.conn.releases.find((r) => r.version === v);
+    if (rel) rel.status = to;
+    renderManage(); runChecks();
+    okManage(m, res, to === 'published' ? `v${v} is now published.` : `v${v} is now a draft.`);
+    watchManage(res.commitSha, v, to === 'published' ? 'live' : 'unpublished', cfg);
+  } catch (e) { failManage(m, e, to === 'published' ? 'Nothing was published.' : 'Nothing was changed.'); }
+}
+
+/** After the commit: wait for the build, then check the website really shows (or no longer shows) the release. */
+async function watchManage(sha, version, goal, cfg) {
+  const line = $('#mgLine');
   const r = await waitForBuild(sha, cfg, (t) => { line.textContent = t; });
-  if (r.unreadable) { line.innerHTML = `The release is deleted from the repository, but ${unreadable} ${actionsLink(cfg)}.`; return; }
+  if (r.unreadable) { line.innerHTML = `The change is saved, but ${unreadable} ${actionsLink(cfg)}.`; return; }
   if (r.timedOut) { line.innerHTML = `The build is taking longer than expected. Check the ${actionsLink(cfg)}.`; return; }
   if (r.run.conclusion !== 'success') {
-    $('#delResult').className = 'result bad';
-    line.innerHTML = `<strong>The website build failed, so the website still shows the old version of the site.</strong> <a href="${esc(r.run.url)}" target="_blank" rel="noopener noreferrer">See why</a>. The release is already deleted from the repository.`;
+    $('#mgResult').className = 'result bad';
+    line.innerHTML = `<strong>The website build failed, so the website still shows the old version of the site.</strong> <a href="${esc(r.run.url)}" target="_blank" rel="noopener noreferrer">See why</a>. The change is already saved in the repository.`;
     return;
   }
-  if (!wasPublished) { line.innerHTML = 'It was a draft, so the website did not show it and nothing changes there.'; return; }
+  if (goal === 'draft-only') { line.innerHTML = 'It was a draft, so the website did not show it and nothing changes there.'; return; }
+  if (goal === 'live') { await showLive(line, sha, { version }); return; }
   const base = siteBase();
   if (new URL(base).origin !== location.origin) { line.textContent = 'The build passed. This page is not on the website itself, so it cannot check; open the site to confirm.'; return; }
   line.textContent = 'The build finished. Checking that the release is really gone from the website…';
   const res = await core.checkGone({ baseUrl: base, version, onAttempt: (n) => { if (n > 1) line.textContent = `The build finished. Waiting for GitHub to publish the change (check ${n})…`; } });
   line.innerHTML = res.ok
-    ? '<strong>Removed from the website.</strong><br><span class="muted">If your browser still shows it, press Ctrl + F5 (browsers can keep an old copy for a few minutes).</span>'
+    ? `<strong>Removed from the website.</strong>${goal === 'unpublished' ? ' Its files are still in the repository as a draft.' : ''}<br><span class="muted">If your browser still shows it, press Ctrl + F5 (browsers can keep an old copy for a few minutes).</span>`
     : `The build passed, but the website still seems to show it (${esc(res.reason)}). GitHub can take a few minutes to publish changes. Check again in a minute, and press Ctrl + F5.`;
 }
 
@@ -378,7 +433,9 @@ $('#relList').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const li = b.closest('.rel-row');
   if (b.dataset.act === 'ask-delete') askDelete(li);
-  if (b.dataset.act === 'cancel-delete') closeConfirms();
+  if (b.dataset.act === 'ask-status') askStatus(li, b.dataset.to);
+  if (b.dataset.act === 'do-status') doStatus(li, b.dataset.to);
+  if (b.dataset.act === 'cancel-confirm') closeConfirms();
   if (b.dataset.act === 'do-delete') doDelete(li);
 });
 $('#relList').addEventListener('input', (e) => { // the delete button only unlocks when the exact version number is typed

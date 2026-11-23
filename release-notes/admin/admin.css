@@ -79,7 +79,10 @@ code{white-space:nowrap}
 .rel-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .rel-title{margin-top:4px;font-size:15px;color:var(--ink-2)}
 .rel-empty{padding:16px 4px;color:var(--ink-3)}
+.rel-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 .rel-extra{grid-column:1/-1}
+.confirm.neutral{border-color:var(--line);background:var(--wash)}
+@media (max-width:560px){.rel-row{grid-template-columns:1fr}.rel-actions{justify-content:flex-start}}
 .confirm{padding:16px 18px;border:1px solid var(--bad);border-radius:var(--r-sm);background:#fff5f4}
 .confirm p+p{margin-top:8px}
 .confirm .actions{margin-top:14px}
