@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as core from '../../admin/core.mjs';
 import * as preview from '../../admin/preview.mjs';
+import * as editor from '../../admin/editor.mjs';
 
 const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RN = path.join(REAL, 'tools', 'rn.mjs');
@@ -499,9 +500,107 @@ test('the preview frame stays locked down: no scripts, no popups, and the page C
 });
 
 test('the shared renderer is browser-safe: no imports and no Node APIs', () => {
-  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs']) {
+  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs', 'admin/editor.mjs']) {
     const src = fs.readFileSync(path.join(REAL, f), 'utf8');
     assert.ok(!/node:|\bprocess\b|\bBuffer\b|\brequire\(|\bfs\./.test(src), `${f} must not use Node APIs`);
   }
   assert.ok(!/^\s*import\s/m.test(fs.readFileSync(path.join(REAL, 'assets/js/render-shared.mjs'), 'utf8')), 'the shared renderer imports nothing');
+});
+
+/* ------------------------------------------------------------------ editing comforts */
+test('formatting buttons: bold, step, notes, bullets, numbers, headings; they toggle and work on several lines', () => {
+  const a = editor.applySyntax;
+  assert.deepEqual(a('', 0, 0, 'bold'), { text: '**bold text**', start: 2, end: 11 });
+  assert.deepEqual(a('make this loud', 5, 9, 'bold'), { text: 'make **this** loud', start: 7, end: 11 });
+  assert.deepEqual(a('', 0, 0, 'step'), { text: '### Step title\n', start: 4, end: 14 });
+  const afterPara = a('Intro text', 10, 10, 'step');
+  assert.equal(afterPara.text, 'Intro text\n\n### Step title\n', 'a step starts its own paragraph');
+  assert.equal(afterPara.text.slice(afterPara.start, afterPara.end), 'Step title');
+  assert.equal(a('Open the claim', 0, 14, 'step').text, '### Open the claim\n', 'selected text becomes the step title');
+  assert.equal(a('', 0, 0, 'note').text, '> Note text');
+  assert.equal(a('Be careful', 3, 3, 'important').text, '!> Be careful', 'the cursor can be anywhere on the line');
+  assert.equal(a('one\ntwo\nthree', 0, 7, 'bullet').text, '- one\n- two\nthree', 'only the selected lines change');
+  assert.equal(a('one\n\ntwo', 0, 8, 'numbered').text, '1. one\n\n2. two', 'numbering skips blank lines');
+  const on = a('first\nsecond', 0, 12, 'bullet');
+  assert.equal(a(on.text, on.start, on.end, 'bullet').text, 'first\nsecond', 'pressing it again turns it off');
+  assert.equal(a('> a note', 0, 8, 'bullet').text, '- a note', 'another format replaces the old one');
+  assert.equal(a('Title here', 0, 0, 'heading').text, '## Title here');
+  assert.equal(a('one\ntwo\n', 0, 4, 'bullet').text, '- one\ntwo\n', 'a selection ending after a line break leaves the next line alone');
+  assert.equal(a('\nx', 0, 0, 'note').text, '> Note text\nx', 'an empty first line is handled');
+  assert.deepEqual(a('abc', 1, 2, 'unknown'), { text: 'abc', start: 1, end: 2 });
+  assert.equal(a('abc', 99, 120, 'bold').text, 'abc**bold text**', 'out of range positions are clamped');
+  assert.deepEqual(editor.insertImageTag('Some text', 9, 9, 2), { text: 'Some text\n[[image 2]]\n', start: 22, end: 22 }, 'the cursor lands after the tag, on a fresh line');
+  assert.equal(editor.insertImageTag('', 0, 0, 1).text, '[[image 1]]\n');
+  assert.equal(editor.insertImageTag('a\nb', 2, 2, 3).text, 'a\n[[image 3]]\nb');
+});
+
+test('what the formatting buttons write is what the real parser understands', () => {
+  let t = '';
+  const press = (kind, start = t.length, end = t.length) => { const r = editor.applySyntax(t, start, end, kind); t = r.text; return r; };
+  t = 'An introduction.';
+  press('step'); t = t.replace('Step title', 'Open the claim');
+  t += 'Choose **Follow-up**.\n';
+  const img = editor.insertImageTag(t, t.length, t.length, 1); t = img.text;
+  press('note'); t = t.replace('Note text', 'Reminders belong to you.');
+  t += '\n';
+  press('bullet'); t = t.replace('List item', 'first point');
+  const { blocks, errors } = core.parseBody(t, [{ name: 'claim.png', alt: 'The claim', caption: '' }]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(blocks.map((b) => b.type), ['p', 'steps']);
+  const step = blocks[1].items[0];
+  assert.equal(step.title, 'Open the claim');
+  assert.deepEqual(step.images, [{ src: 'images/claim.png', alt: 'The claim' }]);
+  assert.match(step.note, /Reminders belong to you\./);
+});
+
+test('problems are reported per field, in page order, and messages know where to jump', () => {
+  const m = model({ version: '2.42.0', date: '', title: ' ', summary: '', items: [
+    { category: '', title: 'A', summary: '', body: '', images: [{ name: 'a.png', alt: '', caption: '' }, { name: 'b.png', alt: 'ok', caption: '' }] },
+    { category: 'bug-fix', title: 'B', summary: 'fine', body: '', images: [] },
+  ] });
+  const i = editor.fieldIssues(m, { existingVersions: ['2.42.0'] });
+  assert.deepEqual(Object.keys(i.meta), ['version', 'date', 'title', 'summary']);
+  assert.match(i.meta.version, /already exists/);
+  assert.deepEqual([i.detailsOk, i.changesOk], [false, false]);
+  assert.deepEqual(Object.keys(i.items[0]).filter((k) => k !== 'shots' && i.items[0][k]), ['category', 'desc']);
+  assert.deepEqual(i.items[0].shots.map(Boolean), [true, false]);
+  assert.deepEqual(i.items[1], { shots: [] });
+  assert.deepEqual(editor.problemOrder(i).map((p) => p.sel), [
+    '#version', '#date', '#title', '#summary',
+    '.item-form[data-i="0"] input[data-f="category"]', '.item-form[data-i="0"] [data-f="summary"]', '.item-form[data-i="0"] .shot-row[data-k="0"] [data-img="alt"]',
+  ]);
+  const good = editor.fieldIssues(model(), { existingVersions: [] });
+  assert.deepEqual([good.detailsOk, good.changesOk], [true, true]);
+  assert.equal(editor.fieldIssues(model({ summary: '', status: 'draft' }), {}).meta.summary, undefined, 'a draft may omit the summary');
+  assert.equal(editor.fieldIssues(model({ items: [] }), {}).changesOk, false, 'no items yet is not complete');
+  assert.deepEqual(editor.jumpTarget('Item 2 (“B”): add a title.'), { sel: '.item-form[data-i="1"]', item: 1 });
+  assert.equal(editor.jumpTarget('Version must look like 2.43.0 (...)').sel, '#version');
+  assert.equal(editor.jumpTarget('Choose a valid release date.').sel, '#date');
+  assert.equal(editor.jumpTarget('Add a release title.').sel, '#title');
+  assert.equal(editor.jumpTarget('Add a short summary (one or two sentences).').sel, '#summary');
+  assert.equal(editor.jumpTarget('The JSON has a mistake: x').sel, '#json');
+  assert.equal(editor.jumpTarget('Something else entirely'), null);
+});
+
+test('the draft kept in the browser: text only, restored safely, never trusted blindly', () => {
+  const form = { version: '2.43.0', date: '2026-12-01', type: 'minor', status: 'draft', featured: true, title: 'T', summary: 'S', tags: 'a', overview: 'O' };
+  const items = [{ category: 'bug-fix', title: 'Fix', module: 'M', audience: 'A', summary: 'x', body: 'b', images: [{ name: 'a.png', bytes: new Uint8Array(9) }, { name: 'b.png' }] }];
+  const d = editor.makeDraft({ form, links: [{ label: 'L', url: 'https://x.test', kind: 'demo' }], items }, 1000);
+  const json = JSON.stringify(d);
+  assert.ok(!json.includes('bytes') && !json.includes('a.png'), 'screenshots are never stored, only how many there were');
+  const back = editor.readDraft(json);
+  assert.deepEqual(back.form, form);
+  assert.deepEqual(back.items[0], { category: 'bug-fix', title: 'Fix', module: 'M', audience: 'A', summary: 'x', body: 'b', shots: 2 });
+  assert.equal(back.at, 1000);
+  for (const bad of [null, '', 'not json', '{}', '{"v":2}', '[]', JSON.stringify({ v: 1, at: 'x', form: {} }), JSON.stringify({ v: 1, at: 1 })]) assert.equal(editor.readDraft(bad), null, `rejects ${bad}`);
+  const odd = editor.readDraft(JSON.stringify({ v: 1, at: 5, form: { type: 'huge', status: 'x', title: 7 }, links: [{ kind: 'zzz', label: 5 }, null], items: [{ category: 'nope', shots: -3 }, null, { title: 'ok', shots: 2.5 }] }));
+  assert.deepEqual([odd.form.type, odd.form.status, odd.form.title], ['minor', 'published', '']);
+  assert.deepEqual(odd.links.map((l) => l.kind), ['other', 'other']);
+  assert.deepEqual(odd.items.map((i) => [i.category, i.shots]), [['', 0], ['', 0], ['', 0]]);
+  assert.equal(editor.isBlankDraft(editor.readDraft(editor.makeDraft({ form: { ...form, title: '', summary: '', overview: '' }, links: [], items: [{ category: '', title: '', module: '', audience: '', summary: '', body: '', images: [] }] }))), true);
+  assert.equal(editor.isBlankDraft(back), false);
+  const huge = editor.readDraft(editor.makeDraft({ form: { ...form, overview: 'x'.repeat(300000) }, links: [], items: [] }));
+  assert.equal(huge.form.overview.length, 100000, 'absurdly long text is cut');
+  assert.deepEqual([0, 30, 50, 90, 3000, 7200, 90000, 200000].map((s) => editor.timeAgo(0, s * 1000)),
+    ['just now', 'just now', '1 minute ago', '2 minutes ago', '50 minutes ago', '2 hours ago', 'yesterday', '2 days ago']);
 });
