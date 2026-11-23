@@ -119,7 +119,8 @@
         <label class="check-row"><input id="editJson" type="checkbox"><span>Edit the JSON by hand (the form above then stops updating it)</span></label>
         <button class="btn btn-outline btn-sm" id="resetJson" type="button" hidden>Reset from the form</button>
       </details>
-      <div class="actions"><button class="btn btn-primary" id="publishBtn" type="button" disabled>Publish release</button><span class="status" id="publishHint"></span></div>
+      <p class="muted small">Press <strong>Preview</strong> to see the finished page, exactly as the website will draw it, before anything is saved.</p>
+      <div class="actions"><button class="btn btn-outline" id="previewBtn" type="button">Preview release page</button><button class="btn btn-primary" id="publishBtn" type="button" disabled>Publish release</button><span class="status" id="publishHint"></span></div>
       <ol class="progress" id="progress" aria-live="polite" hidden></ol>
       <div class="result" id="result" role="status" hidden></div>
     </section>
@@ -151,6 +152,21 @@
   </div>
 </footer>
 <!--/@footer-->
+
+<dialog class="pv" id="preview" aria-labelledby="pvTitle">
+  <div class="pv-bar">
+    <h2 class="pv-title" id="pvTitle">Preview</h2>
+    <div class="pv-sizes" role="group" aria-label="Preview width">
+      <button type="button" class="btn btn-outline btn-sm" data-size="desktop" aria-pressed="true">Desktop</button>
+      <button type="button" class="btn btn-outline btn-sm" data-size="tablet" aria-pressed="false">Tablet</button>
+      <button type="button" class="btn btn-outline btn-sm" data-size="phone" aria-pressed="false">Phone</button>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" id="pvClose">Close <kbd>Esc</kbd></button>
+  </div>
+  <p class="pv-note" id="pvNote" role="status"></p>
+  <div class="pv-stage" id="pvStage" data-size="desktop"><iframe class="pv-frame" id="pvFrame" title="Preview of the release page" sandbox="allow-same-origin"></iframe></div>
+  <p class="pv-foot" id="pvFoot"></p>
+</dialog>
 <script type="module" src="admin.mjs"></script>
 </body>
 </html>

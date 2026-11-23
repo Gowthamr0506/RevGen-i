@@ -1,6 +1,7 @@
 // The release composer page. All the logic that matters (parsing, validation, the GitHub commit) is in core.mjs and is unit-tested;
 // this file only wires it to the form.
 import * as core from './core.mjs';
+import * as preview from './preview.mjs';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -13,7 +14,7 @@ const store = {
 const fmtBytes = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.avif': 'image/avif' };
 
-const state = { conn: null, items: [], links: [], typeTouched: false, jsonOverride: false, busy: false, done: false, managing: false, ready: null };
+const state = { conn: null, items: [], links: [], typeTouched: false, jsonOverride: false, busy: false, done: false, managing: false, previewing: false, ready: null, view: null };
 const newItem = () => ({ category: '', title: '', module: '', audience: '', summary: '', body: '', images: [] });
 
 /* ------------------------------------------------------------------ small UI helpers */
@@ -151,6 +152,7 @@ function runChecks() {
   ].join('');
 
   state.ready = !errors.length && content ? { entry: gen.entry, content } : null;
+  state.view = content ? { entry: gen.entry, content, problems: errors.length } : null; // what the preview draws, even while there are problems
   const can = !!state.ready && !!state.conn && !state.busy && !state.done;
   $('#publishBtn').disabled = !can;
   $('#publishHint').textContent = state.done ? '' : !state.conn ? 'Connect first (step 1).' : errors.length && touched ? `Fix ${errors.length} thing${errors.length > 1 ? 's' : ''} above to publish.` : errors.length ? 'Fill in the details above to publish.' : '';
@@ -258,6 +260,127 @@ async function watchBuild(sha, entry, cfg) {
   }
 }
 
+/* ------------------------------------------------------------------ preview */
+// The page is drawn by the same code the website build uses (assets/js/render-shared.mjs) and shown in a sandboxed frame
+// (scripts off, same origin so the stylesheets and blob: screenshots load). Nothing is saved or sent anywhere.
+const pv = { dlg: $('#preview'), frame: $('#pvFrame'), stage: $('#pvStage'), note: $('#pvNote'), foot: $('#pvFoot'), dispose: null, footTimer: 0 };
+const PV_FOOT = 'Links to other pages are switched off here. The previous / next links and the “Latest release” badge are added by the website once the release is on it.';
+const mimeOf = (name) => MIME[name.slice(name.lastIndexOf('.')).toLowerCase()] || 'application/octet-stream';
+
+/** Natural size of each screenshot, so the frame reserves space for it exactly like the built page does. */
+function measureImages(urls) {
+  const sizes = {};
+  return Promise.all(Object.entries(urls).map(([name, url]) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => { if (img.naturalWidth) sizes[name] = { w: img.naturalWidth, h: img.naturalHeight }; resolve(); };
+    img.onerror = () => resolve();
+    setTimeout(resolve, 4000);
+    img.src = url;
+  }))).then(() => sizes);
+}
+
+function setPvFoot(text, temporary) {
+  clearTimeout(pv.footTimer);
+  pv.foot.textContent = text;
+  if (temporary) pv.footTimer = setTimeout(() => { pv.foot.textContent = PV_FOOT; }, 4500);
+}
+
+function onFrameClick(e) {
+  const a = e.target.closest && e.target.closest('a');
+  if (!a) return;
+  e.preventDefault(); // nothing in the frame may navigate the frame away
+  const href = a.getAttribute('href') || '';
+  if (href.startsWith('#')) { // in-page links (contents list, section anchors); handled here because a frame built from text resolves "#x" against this page
+    let id = href.slice(1);
+    try { id = decodeURIComponent(id); } catch { /* keep as is */ }
+    a.ownerDocument.getElementById(id)?.scrollIntoView({ block: 'start' });
+  } else if (/^(https?:|blob:)/i.test(a.href) && (a.hasAttribute('data-lightbox') || /^https?:\/\//i.test(href))) {
+    window.open(a.href, '_blank', 'noopener'); // enlarge a screenshot, or follow an outside link, in a new tab
+  } else setPvFoot('That link goes to another page of the website, so it is switched off in the preview.', true);
+}
+
+function wireFrame() {
+  const doc = pv.frame.contentDocument, win = pv.frame.contentWindow;
+  if (!doc || !doc.body || !doc.body.dataset.version) return; // the empty frame before / after a preview
+  const toc = doc.querySelector('.toc');
+  if (toc) { // same as the website: the contents list starts open on wide screens and folded on narrow ones
+    const mq = win.matchMedia('(max-width: 1100px)');
+    const sync = () => { toc.open = !mq.matches; };
+    sync(); mq.addEventListener('change', sync);
+  }
+  doc.addEventListener('click', onFrameClick);
+}
+
+/** images: {fileName: blob url}. Throws if the page cannot be drawn; the caller owns (and revokes) the urls unless this succeeds. */
+async function openPreview({ entry, content, images = {}, lead, dispose }) {
+  const prep = preview.prepare(entry, content, todayIso());
+  const sizes = await measureImages(images);
+  const imageInfo = (src) => { const m = /^images\/([^/]+)$/.exec(src); return m ? sizes[m[1]] : undefined; };
+  const chrome = { skip: $('.skip')?.outerHTML || '', header: $('.site-header')?.outerHTML || '', footer: $('.site-footer')?.outerHTML || '' };
+  let html;
+  try { html = preview.previewDocument({ entry: prep.entry, content: prep.content, imageUrls: images, imageInfo, ...chrome }); }
+  catch (e) { throw new Error(`The preview could not be drawn: ${e.message || e}. Check the content for a mistake.`); }
+  pv.note.textContent = [lead, ...preview.describeGaps(prep)].filter(Boolean).join(' ');
+  $('#pvTitle').textContent = `Preview of v${prep.entry.version}`;
+  setPvFoot(PV_FOOT);
+  pv.dispose = dispose || null;
+  pv.dlg.showModal();
+  pv.frame.srcdoc = html;
+}
+pv.frame.addEventListener('load', wireFrame);
+pv.dlg.addEventListener('close', () => {
+  pv.frame.srcdoc = '';
+  if (pv.dispose) { pv.dispose(); pv.dispose = null; }
+});
+pv.dlg.addEventListener('click', (e) => { if (e.target === pv.dlg) pv.dlg.close(); }); // the dark area around the box
+$('#pvClose').addEventListener('click', () => pv.dlg.close());
+$('#preview .pv-sizes').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-size]'); if (!b) return;
+  pv.stage.dataset.size = b.dataset.size;
+  document.querySelectorAll('#preview .pv-sizes [data-size]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+});
+
+/** Preview of what is in the form right now (steps 2 and 3), before anything is saved. */
+async function previewForm() {
+  runChecks();
+  if (!state.view) { $('#publishHint').textContent = 'The JSON has a mistake, so there is nothing to preview yet. Fix it or press “Reset from the form”.'; return; }
+  const { entry, content, problems } = state.view;
+  const images = Object.fromEntries(state.items.flatMap((it) => it.images.map((im) => [im.name, im.url]))); // the form's own blob urls: the form revokes them
+  const lead = `${entry.status === 'draft' ? 'This is how the draft will look.' : 'This is how the page will look once it is published.'} Nothing has been saved yet.` +
+    (problems ? ` ${problems} thing${problems > 1 ? 's' : ''} still need${problems > 1 ? '' : 's'} fixing before you can publish (listed in step 4).` : '');
+  try { await openPreview({ entry, content, images, lead }); }
+  catch (e) { $('#publishHint').textContent = e.message || String(e); }
+}
+
+/** Preview of a release that is already saved in the repository (Manage releases). Reads it from GitHub; changes nothing. */
+async function previewSaved(li) {
+  if (state.managing || state.previewing) return;
+  const v = li.dataset.v, extra = li.querySelector('.rel-extra'), btn = li.querySelector('[data-act=preview]'), cfg = getCfg();
+  closeConfirms();
+  extra.hidden = false;
+  extra.innerHTML = '<p class="muted">Loading the saved release…</p>';
+  state.previewing = true; btn.disabled = true;
+  const urls = [];
+  try {
+    const r = await core.loadReleaseForPreview({ ...cfg, version: v, onProgress: (t) => { extra.querySelector('p').textContent = t; } });
+    if (r.custom) {
+      const link = r.entry.status === 'draft' ? '' : ` <a href="${esc(`${siteBase()}releases/v${v}/`)}" target="_blank" rel="noopener noreferrer">Open it on the website</a>.`;
+      extra.innerHTML = `<div class="confirm neutral"><p><strong>v${esc(v)} uses a hand-written page.</strong> It is not built from a form, so it cannot be previewed here.${link}</p>${closeBtn}</div>`;
+      return;
+    }
+    const images = {};
+    for (const im of r.images) { const u = URL.createObjectURL(new Blob([im.bytes], { type: mimeOf(im.name) })); urls.push(u); images[im.name] = u; }
+    const lead = r.entry.status === 'draft'
+      ? `This is the saved draft of v${v}, read from GitHub just now. It is not on the website.`
+      : `This is v${v} as saved in the repository (read from GitHub just now), drawn the same way the website draws it.`;
+    await openPreview({ entry: r.entry, content: r.content, images, lead, dispose: () => urls.forEach((u) => URL.revokeObjectURL(u)) });
+    closeConfirms();
+  } catch (e) {
+    urls.forEach((u) => URL.revokeObjectURL(u));
+    extra.innerHTML = `<div class="confirm bad"><p>${esc(e.message || String(e))}</p>${closeBtn}</div>`;
+  } finally { state.previewing = false; btn.disabled = false; }
+}
+
 /* ------------------------------------------------------------------ manage releases: publish, unpublish, delete */
 const relOrder = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || core.compareVersions(b.version, a.version);
 const typedMatches = (typed, version) => typed.trim().replace(/^v/i, '') === version; // "2.43.0" or "v2.43.0"
@@ -277,6 +400,7 @@ function renderManage() {
         <div class="rel-title">${esc(r.title || '')}</div>
       </div>
       <div class="rel-actions">
+        <button type="button" class="btn btn-outline btn-sm" data-act="preview">Preview</button>
         <button type="button" class="btn btn-outline btn-sm" data-act="ask-status" data-to="${draft ? 'published' : 'draft'}">${draft ? 'Publish' : 'Unpublish'}</button>
         <button type="button" class="btn btn-outline-danger btn-sm" data-act="ask-delete">Delete…</button>
       </div>
@@ -432,6 +556,7 @@ $('#links').addEventListener('click', (e) => { const b = e.target.closest('[data
 $('#relList').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const li = b.closest('.rel-row');
+  if (b.dataset.act === 'preview') previewSaved(li);
   if (b.dataset.act === 'ask-delete') askDelete(li);
   if (b.dataset.act === 'ask-status') askStatus(li, b.dataset.to);
   if (b.dataset.act === 'do-status') doStatus(li, b.dataset.to);
@@ -451,6 +576,7 @@ for (const id of ['#owner', '#repo', '#branch', '#token']) $(id).addEventListene
 $('#connectBtn').addEventListener('click', doConnect);
 $('#token').addEventListener('keydown', (e) => { if (e.key === 'Enter') doConnect(); });
 $('#publishBtn').addEventListener('click', doPublish);
+$('#previewBtn').addEventListener('click', previewForm);
 $('#editJson').addEventListener('change', (e) => {
   state.jsonOverride = e.target.checked;
   $('#json').readOnly = !state.jsonOverride; $('#resetJson').hidden = !state.jsonOverride;

@@ -297,6 +297,9 @@ export function b64ToUtf8(b64) {
   const bin = atob(String(b64).replace(/\s+/g, ''));
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
+export function b64ToBytes(b64) {
+  return Uint8Array.from(atob(String(b64).replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+}
 export function bytesToB64(bytes) {
   let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -366,10 +369,43 @@ async function readReleaseState(api, branch, dir, version) {
   const tree = await api('GET', `/git/trees/${baseTree}?recursive=1`, null, 'The repository files');
   if (tree.truncated) throw new GitHubError(422, 'The repository is too large to list safely from this page. Ask Claude to delete the release instead.');
   const prefix = `${dir}/releases/v${version}/`; // built only from a validated MAJOR.MINOR.PATCH, so it cannot point anywhere else
-  const files = (tree.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith(prefix)).map((t) => t.path);
+  const found = (tree.tree || []).filter((t) => t.type === 'blob' && t.path.startsWith(prefix));
+  const files = found.map((t) => t.path);
+  const shas = Object.fromEntries(found.map((t) => [t.path, t.sha])); // lets the preview fetch a screenshot by its blob
   const idx = await api('GET', `/contents/${dir}/releases.json?ref=${headSha}`, null, `${dir}/releases.json`);
   const data = JSON.parse(b64ToUtf8(idx.content));
-  return { headSha, baseTree, files, data, entry: (data.releases || []).find((r) => r.version === version) || null };
+  return { headSha, baseTree, files, shas, data, entry: (data.releases || []).find((r) => r.version === version) || null };
+}
+
+/**
+ * Loads one saved release so the page can preview it: its releases.json entry, content.json and screenshots (bytes).
+ * Read-only. A release with a hand-written page has no content.json to draw, so it comes back as {custom:true, entry}.
+ */
+export async function loadReleaseForPreview({ fetch: f = globalThis.fetch, token, owner, repo, branch = 'main', dir = 'release-notes', version, onProgress = () => {} }) {
+  assertVersion(version);
+  const api = (m, p, b, what) => gh(f, token, m, `/repos/${owner}/${repo}${p}`, b, what);
+  onProgress('Reading the repository…');
+  const s = await readReleaseState(api, branch, dir, version);
+  if (!s.entry) throw new GitHubError(404, `Version ${version} is not in the release list.`);
+  if (s.entry.page === 'custom') return { custom: true, entry: s.entry };
+  const prefix = `${dir}/releases/v${version}/`;
+  let content;
+  try { content = JSON.parse(b64ToUtf8((await api('GET', `/contents/${prefix}content.json?ref=${s.headSha}`, null, 'content.json')).content)); }
+  catch (e) {
+    if (e instanceof GitHubError) throw e.status === 404 ? new GitHubError(404, `v${version} has no content.json, so there is nothing to preview.`) : e;
+    throw new GitHubError(422, `The content.json of v${version} is not valid JSON, so it cannot be previewed.`);
+  }
+  const imgPrefix = `${prefix}images/`;
+  const paths = s.files.filter((p) => p.startsWith(imgPrefix) && !p.slice(imgPrefix.length).includes('/'));
+  const images = [];
+  for (let i = 0; i < paths.length; i += 4) { // a few at a time: quick, and kind to the API
+    onProgress(`Loading screenshots (${Math.min(i + 4, paths.length)} of ${paths.length})…`);
+    images.push(...await Promise.all(paths.slice(i, i + 4).map(async (p) => ({
+      name: p.slice(imgPrefix.length),
+      bytes: b64ToBytes((await api('GET', `/git/blobs/${s.shas[p]}`, null, 'A screenshot')).content),
+    }))));
+  }
+  return { entry: s.entry, content, images };
 }
 
 /** What deleting a release would remove: every file under releases/vX.Y.Z/ and its releases.json entry. Changes nothing. */
