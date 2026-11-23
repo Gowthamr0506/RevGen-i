@@ -257,7 +257,9 @@ export function validateRelease(model, ctx = {}) {
   const meta = validateMeta(model, ctx), att = validateAttachments(model, ctx);
   const { content, parseErrors } = buildContent(model);
   const structural = validateContent(content, att.names, { published: model.status !== 'draft' });
-  const errors = [...meta.errors, ...att.errors, ...parseErrors, ...structural.errors];
+  // a screenshot without alt text is already reported once per attachment; do not list it again per place it is used
+  const structuralErrors = structural.errors.filter((e) => !/add alt text describing the screenshot/.test(e));
+  const errors = [...meta.errors, ...att.errors, ...parseErrors, ...structuralErrors];
   const warnings = [...meta.warnings, ...att.warnings, ...structural.warnings];
   return { errors: [...new Set(errors)], warnings: [...new Set(warnings)], content, entry: makeEntry(model) };
 }
