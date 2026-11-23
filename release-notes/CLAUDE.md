@@ -100,6 +100,7 @@ The owner can also add a release without you, from `/admin/`: it commits `releas
 - Never put a token, or code that stores one anywhere except the current tab's `sessionStorage`, into the composer. Its page CSP allows `connect-src` only to `'self'` and `https://api.github.com`; keep it that way.
 - The composer can also **delete** a release (`core.previewDelete` / `deleteRelease` / `checkGone`): one commit that removes every file under `releases/vX.Y.Z/` plus its `releases.json` entry, behind a type-the-version confirmation. It validates the version as MAJOR.MINOR.PATCH before building any path, never touches other releases, and tests prove the real build accepts what is left. Git history still holds the deleted files; do not claim otherwise.
 - It also **publishes / unpublishes** (`core.previewStatusChange` / `setReleaseStatus`): one commit that flips `status` in `releases.json` and touches nothing else. Publishing is refused with a list of reasons unless the release would pass the website build (title, summary, content.json with at least one item, images present with alt text; custom pages need their index.html), because a failing build blocks every deploy. Keep `publishProblems` in step with `tools/lib/model.mjs` if the rules change.
+- It can also **preview** a release (`admin/preview.mjs`, `core.loadReleaseForPreview`): the form's content before saving, or a saved release read from GitHub. The release-page markup is drawn by `assets/js/render-shared.mjs`, which BOTH `tools/lib/render.mjs` (the build) and the preview import, so the two cannot drift. Keep that file free of imports and Node APIs (a test enforces it), and when you change page markup, rebuild and check the tests: `composer.test.mjs` asserts the preview's `<main>` equals the built page's. The preview frame is `sandbox="allow-same-origin"` with no scripts, so anything the page must show has to work without JavaScript (previous/next links and the "Latest" badge are the only JS-added parts). Never add `allow-scripts` to it, and never loosen the page CSP for it.
 - You never need the token yourself. Do not ask the owner to paste it into chat.
 
 ## Other tasks
@@ -115,13 +116,13 @@ The owner can also add a release without you, from `/admin/`: it commits `releas
 ## Layout
 
 ```
-admin/                    manual release composer (index.html + admin.mjs UI + core.mjs logic + admin.css); lets the owner add a release from a form
+admin/                    manual release composer (index.html + admin.mjs UI + core.mjs logic + preview.mjs + admin.css); lets the owner add a release from a form and preview it
 index.html                landing (shell; rendered from releases.json by assets/js/portal.js)
 releases.json             index + metadata (source of truth); "derived" fields are generated
 releases/index.html       archive shell
 releases/vX.Y.Z/          index.html (generated) · content.json (source) · images/ · optional demo files
 templates/release.html    page template; templates/partials/{head,header,footer}.html shared markup
-assets/{css,js,images,fonts}/   portal.css, fonts.css, common.js, portal.js, release.js, boot.js, images/logo.svg (the OFFICIAL RevGen-i logo supplied by the owner: use it as-is wherever the brand appears, never redraw or recolour it), images/logo-on-white.svg (the same paths on a white tile, for dark backgrounds such as GitHub dark-mode READMEs), favicon.svg (built from the logo's "i"), self-hosted woff2 fonts + OFL licences (never load fonts or scripts from a third party; the CSP and validator forbid it)
+assets/{css,js,images,fonts}/   portal.css, fonts.css, common.js, portal.js, release.js, boot.js, render-shared.mjs (the release-page renderer, shared by the build and the composer's preview: pure, no imports), images/logo.svg (the OFFICIAL RevGen-i logo supplied by the owner: use it as-is wherever the brand appears, never redraw or recolour it), images/logo-on-white.svg (the same paths on a white tile, for dark backgrounds such as GitHub dark-mode READMEs), favicon.svg (built from the logo's "i"), self-hosted woff2 fonts + OFL licences (never load fonts or scripts from a third party; the CSP and validator forbid it)
 tools/rn.mjs + lib/       CLI; tools/tests/rn.test.mjs
 _site/                    output of `stage` (git-ignored): exactly what GitHub Pages serves
 ```

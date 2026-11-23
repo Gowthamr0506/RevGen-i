@@ -45,9 +45,11 @@ You do not need Claude for a release. Open **`/admin/`** on the site (for exampl
 1. **Connect:** paste the token and press Connect. The page checks access and suggests the next version number.
 2. **Details:** version, date, title, summary, optional overview and links. Choose *Publish* or *Save as a draft*.
 3. **What changed:** add one item per change (category, title, short description, optional details) and attach screenshots. Each screenshot gets alt text and an optional caption. Screenshots are converted to WebP (at most 1800 px wide) in your browser, so files stay small and text stays sharp.
-4. **Review and publish:** the page lists anything to fix in plain words, then saves everything to GitHub as one commit. It then watches the website build and, once it passes, **checks that the new page and the public release list really load** (bypassing caches) before it says *Live*. The link it shows carries a fresh-copy marker, so your browser cannot answer from an older cached page. This usually takes about a minute; if the page is not reachable yet, the form says so and tells you to retry shortly instead of claiming success.
+4. **Review and publish:** press **Preview release page** at any time to see the finished page before anything is saved (see *Previewing* below). The page lists anything to fix in plain words, then saves everything to GitHub as one commit. It then watches the website build and, once it passes, **checks that the new page and the public release list really load** (bypassing caches) before it says *Live*. The link it shows carries a fresh-copy marker, so your browser cannot answer from an older cached page. This usually takes about a minute; if the page is not reachable yet, the form says so and tells you to retry shortly instead of claiming success.
 
 The *Details* box accepts simple formatting: a blank line starts a paragraph, `- ` makes bullets, `1. ` a numbered list, `## ` a sub-heading, `> ` a note box, `!> ` an important box, `### Step title` a numbered step (text, notes and screenshots below it belong to the step), and `[[image 2]]` places that item's second screenshot. For anything more unusual, open *Advanced* and edit the generated `content.json`.
+
+**Previewing.** *Preview release page* (step 4) opens the release you are writing in a window, with **Desktop / Tablet / Phone** width buttons. It works before you connect, before the form is complete and while there are problems to fix: anything still missing gets a placeholder (for example "Untitled release"), and an item that has no category yet is left out, with a sentence above the preview saying so. Your attached screenshots appear in it. In step 5, the **Preview** button on any saved release (draft or published) reads that release from GitHub and shows it the same way; it only reads, and a release with a hand-written page says it cannot be previewed. The preview is **the real page, not a lookalike**: the website build and the preview run the same code (`assets/js/render-shared.mjs`), and a test checks the preview's markup equals what the build writes. Differences you will see: links to other pages are switched off (a screenshot or an outside link opens in a new tab), and the previous / next links and the "Latest release" badge are only added by the website once the release is on it. Nothing in the preview runs scripts, and nothing is saved or sent anywhere.
 
 **Publishing and unpublishing.** Step 5, *Manage releases*, lists every release in the repository (published and drafts, newest first). A draft has a **Publish** button; a published release has an **Unpublish** button. Both only change that release's `status` in `releases.json`, in one commit, and never touch its files. Before it publishes a draft, the page runs the same checks the website build uses (title, summary, at least one item, every screenshot present and described) and, if something is missing, lists exactly what instead of publishing, so an unfinished draft can never break the site. After the commit it waits for the website to rebuild and checks that the release really appears (or really disappears). Unpublished releases keep all their files and can be published again at any time.
 
@@ -55,7 +57,7 @@ The *Details* box accepts simple formatting: a blank line starts a paragraph, `-
 
 What it will not do, on purpose:
 - **It never overwrites a release.** A version that already exists is refused; every release is added as new files. To correct a published release, ask Claude or edit `releases/vX/content.json` on GitHub.
-- **There is no live preview.** The site is built by GitHub after you publish. Use *Save as a draft* for work in progress (note that drafts are hidden from the website but their files are visible in the repository if it is public).
+- **The preview is not the website.** It shows the page, but only the website itself proves the build passes and the page is reachable; after you publish, the page checks that. Use *Save as a draft* for work in progress (note that drafts are hidden from the website but their files are visible in the repository if it is public).
 - **If the website build fails** (for example a content mistake the page could not detect), the site stays as it was and the page links to the failing run. Your files are saved in the repository.
 
 Security: the token is kept in this browser tab only (and only if you tick *Keep the token*), is sent only to `api.github.com`, and the page loads no third-party code (a strict Content-Security-Policy enforces this). Anyone can open the page, but nobody can publish without a token that has write access to your repository. Use a fine-grained token limited to this repository, with a short expiry, and delete it on GitHub when you no longer need it.
@@ -70,9 +72,9 @@ releases/vX.Y.Z/
   content.json            the release's content (structured; validated)
   index.html              generated from templates/release.html (do not edit by hand)
   images/                 screenshots for this release
-admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, admin.css)
+admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, preview.mjs, admin.css)
 templates/                release.html + shared head/header/footer partials (one copy of each)
-assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts
+assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts; js/render-shared.mjs = the release-page renderer shared by the build and the composer's preview
 tools/                    rn.mjs CLI + tests (Node built-ins only)
 ```
 
