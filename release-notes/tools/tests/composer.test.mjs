@@ -9,6 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as core from '../../admin/core.mjs';
+import * as preview from '../../admin/preview.mjs';
 
 const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RN = path.join(REAL, 'tools', 'rn.mjs');
@@ -18,7 +19,7 @@ const b64 = (s) => Buffer.from(s).toString('base64').replace(/(.{60})/g, '$1\n')
 
 /** A tiny in-memory GitHub: just the endpoints the composer uses, with real fast-forward semantics. */
 function mockGitHub({ releases = [], raceOnce = false, failWith = null } = {}) {
-  const st = { head: 'c0', files: new Map(), commits: new Map(), trees: new Map(), blobs: new Map(), n: 0, calls: [], raced: false };
+  const st = { head: 'c0', files: new Map(), commits: new Map(), trees: new Map(), blobs: new Map(), fileBlobs: new Map(), n: 0, fb: 0, calls: [], raced: false };
   st.files.set('release-notes/releases.json', JSON.stringify({ product: 'RevGen-i', schemaVersion: 1, site: { url: '', noindex: false }, releases }));
   st.commits.set('c0', { files: new Map(st.files), parent: null });
   const fetch = async (url, init = {}) => {
@@ -45,7 +46,11 @@ function mockGitHub({ releases = [], raceOnce = false, failWith = null } = {}) {
     }
     if (method === 'GET' && p.startsWith('/git/trees/')) {
       const files = st.commits.get(p.split('/').pop().replace(/^t-/, ''))?.files ?? new Map();
-      return ok({ truncated: false, tree: [...files.keys()].map((path) => ({ path, mode: '100644', type: 'blob', sha: 'x' })) });
+      return ok({ truncated: false, tree: [...files.keys()].map((path) => { const sha = `fb${++st.fb}`; st.fileBlobs.set(sha, files.get(path)); return { path, mode: '100644', type: 'blob', sha }; }) });
+    }
+    if (method === 'GET' && p.startsWith('/git/blobs/')) { // reading a file by the sha the tree listing gave
+      const data = st.fileBlobs.get(p.split('/').pop());
+      return data === undefined ? ok({ message: 'Not Found' }, 404) : ok({ content: b64(data), encoding: 'base64' });
     }
     if (method === 'POST' && p === '/git/commits') { const sha = `c${++st.n}`; st.commits.set(sha, { files: st.trees.get(body.tree), parent: body.parents[0] }); return ok({ sha }, 201); }
     if (method === 'PATCH' && p === '/git/refs/heads/main') {
@@ -376,4 +381,127 @@ test('GitHub errors become plain advice; connect() and the build-status lookup w
   assert.equal(c.releases[0].status, 'draft', 'connect() sees drafts, which the public site hides');
   const run = await core.getBuildRun(opts({ sha: 'abc', fetch: gh.fetch }));
   assert.deepEqual([run.status, run.conclusion], ['completed', 'success']);
+});
+
+/* ------------------------------------------------------------------ preview */
+const mainOf = (html) => html.match(/<main id="main"[\s\S]*<\/main>/)[0];
+
+test('preview: the page drawn for a saved release is exactly the page the real build writes', async () => {
+  const gh = mockGitHub();
+  const m = model({
+    featured: true, overview: 'First paragraph.\n\nSecond one with a [link](https://example.com).',
+    links: [{ label: 'Watch the demo', url: 'https://example.com/demo', kind: 'video' }],
+    items: [
+      { category: 'new-feature', title: 'Follow-up reminders', module: 'Claims', audience: 'Leads, Managers', summary: 'Pick a date.',
+        body: '## Rules\n- one\n- two\n\n### Open the claim\nChoose **Follow-up**.\n[[image 1]]\n\n> Reminders belong to you.\n\n!> Careful.\n\n### Save it\nClick Save.',
+        images: [{ name: 'claim.png', alt: 'The claim toolbar', caption: 'Claim `toolbar`' }, { name: 'two.png', alt: 'Two' }, { name: 'three.png', alt: 'Three' }] },
+      { category: 'enhancement', title: 'Bulk export', summary: 'More columns.', body: '', images: [] },
+      { category: 'bug-fix', title: 'Notes order', summary: 'Newest first.', body: '', images: [] },
+    ],
+  });
+  const val = core.validateRelease(m, { existingVersions: [] });
+  assert.deepEqual(val.errors, []);
+  await core.publish(opts({ entry: val.entry, content: val.content, images: ['claim.png', 'two.png', 'three.png'].map((name) => ({ name, bytes: png(64, 40) })), fetch: gh.fetch }));
+  const root = materialize(gh.st);
+  const build = rn(root, 'build');
+  assert.equal(build.code, 0, build.out);
+  const built = mainOf(fs.readFileSync(path.join(root, 'releases/v2.43.0/index.html'), 'utf8'));
+
+  const calls = gh.st.calls.length, progress = [];
+  const saved = await core.loadReleaseForPreview(opts({ version: '2.43.0', fetch: gh.fetch, onProgress: (t) => progress.push(t) }));
+  assert.ok(gh.st.calls.slice(calls).every((c) => c.startsWith('GET')), 'loading a preview only reads from GitHub');
+  assert.ok(progress.some((t) => /Loading screenshots \(3 of 3\)/.test(t)));
+  assert.deepEqual(saved.images.map((i) => i.name).sort(), ['claim.png', 'three.png', 'two.png']);
+  assert.deepEqual([...saved.images.find((i) => i.name === 'claim.png').bytes], [...png(64, 40)], 'screenshots arrive byte for byte');
+  const prep = preview.prepare(saved.entry, saved.content, '2026-01-01');
+  assert.deepEqual([prep.missing, prep.omitted], [[], []]);
+  assert.deepEqual(prep.content, saved.content, 'complete content is drawn as it is');
+  const doc = preview.previewDocument({ ...prep, imageInfo: () => ({ w: 64, h: 40 }), root: '../../' });
+  assert.equal(mainOf(doc), built, 'same code, same data: the preview is the published page');
+  assert.match(built, /gallery gallery-2/);
+});
+
+test('preview: screenshots come from the browser (blob urls); unknown ones fall back to the release folder; no scripts', () => {
+  const content = { items: [{ category: 'bug-fix', title: 'Fix', summary: 's', body: [{ type: 'image', src: 'images/a b.png', alt: 'A' }, { type: 'image', src: 'images/missing.png', alt: 'M' }] }] };
+  const entry = { version: '1.0.0', date: '2026-01-01', type: 'major', status: 'published', title: 'T' };
+  const doc = preview.previewDocument({ entry, content, imageUrls: { 'a b.png': 'blob:https://x/1' }, skip: '<a class="skip" href="#main">Skip</a>', header: '<header class="site-header">H</header>', footer: '<footer class="site-footer">F</footer>' });
+  assert.match(doc, /<img src="blob:https:\/\/x\/1" alt="A"/);
+  assert.match(doc, /<a class="shot-link" href="blob:https:\/\/x\/1"/);
+  assert.match(doc, /<img src="images\/missing\.png" alt="M"/, 'a screenshot that is not attached stays a broken image, as it would on the website');
+  assert.ok(doc.indexOf('class="skip"') < doc.indexOf('site-header') && doc.indexOf('site-header') < doc.indexOf('<main') && doc.indexOf('<main') < doc.indexOf('site-footer'));
+  assert.match(doc, /href="\.\.\/assets\/css\/portal\.css"/);
+  assert.ok(!/<script/i.test(doc), 'the preview runs no scripts');
+});
+
+test('preview: gaps get placeholders, items without a category are left out, odd values cannot inject markup', () => {
+  const evil = '"><img src=x onerror=alert(1)>';
+  const p = preview.prepare({ version: evil, date: '', type: 'huge', status: 'whatever', title: '  ' }, { items: [
+    { category: '', title: 'No category yet', summary: 'x' },
+    { category: 'bug-fix', title: 'Fine', summary: 'x', id: evil, body: [{ type: 'callout', tone: evil, text: 'hi' }] },
+    null,
+  ] }, '2026-12-01');
+  assert.deepEqual(p.missing, ['the version number', 'the release date', 'the title']);
+  assert.deepEqual([p.entry.version, p.entry.date, p.entry.type, p.entry.status, p.entry.title], ['0.0.0', '2026-12-01', 'minor', 'published', 'Untitled release']);
+  assert.deepEqual(p.omitted, ['Item 1 (“No category yet”)', 'Item 3']);
+  assert.equal(p.content.items.length, 1);
+  assert.equal(p.content.items[0].id, undefined, 'an unsafe id is dropped (the title is used)');
+  assert.equal(p.content.items[0].body[0].tone, 'note');
+  assert.ok(!preview.previewDocument(p).includes(evil), 'nothing typed into the form reaches the markup unescaped');
+  assert.deepEqual(preview.describeGaps(p), [
+    'Not filled in yet, so a placeholder is shown for the version number, the release date and the title.',
+    'Item 1 (“No category yet”) and Item 3 are left out because they have no category yet.',
+  ]);
+  assert.deepEqual(preview.describeGaps({ missing: [], omitted: ['Item 2'] }), ['Item 2 is left out because it has no category yet.']);
+  assert.deepEqual(preview.describeGaps({ missing: [], omitted: [] }), []);
+
+  const d = preview.previewDocument(preview.prepare({ version: '1.0.0', date: '2026-01-01', type: 'major', status: 'draft', title: 'T' }, { items: [] }, '2026-01-01'));
+  assert.match(d, /banner-draft/);
+  assert.match(d, /stays hidden from the website until you publish/);
+  assert.match(d, /This release has no items yet/);
+  assert.equal(preview.prepare({ version: '1.0.0', date: '2026-01-01', type: 'major', status: 'published', title: 'T' }, 'not an object', '2026-01-01').content.items.length, 0, 'hand-edited JSON of the wrong shape does not break the preview');
+});
+
+test('loading a saved release for the preview is read-only and safe', async () => {
+  const entry = (extra) => ({ version: '1.0.0', date: '2026-01-01', type: 'major', status: 'draft', featured: false, title: 'T', summary: 'S', ...extra });
+  const idle = mockGitHub();
+  for (const bad of ['../x', '1.0', 'v1.0.0']) await assert.rejects(core.loadReleaseForPreview(opts({ version: bad, fetch: idle.fetch })), /not a version number/);
+  assert.equal(idle.st.calls.length, 0, 'an invalid version never reaches the API');
+  await assert.rejects(core.loadReleaseForPreview(opts({ version: '4.0.0', fetch: idle.fetch })), (e) => e.status === 404);
+
+  const custom = mockGitHub({ releases: [entry({ page: 'custom' })] });
+  const c = await core.loadReleaseForPreview(opts({ version: '1.0.0', fetch: custom.fetch }));
+  assert.deepEqual([c.custom, c.entry.version, c.images], [true, '1.0.0', undefined], 'a hand-written page has nothing to draw');
+
+  const none = mockGitHub({ releases: [entry()] });
+  await assert.rejects(core.loadReleaseForPreview(opts({ version: '1.0.0', fetch: none.fetch })), (e) => e.status === 404 && /no content\.json/.test(e.message));
+  const broken = mockGitHub({ releases: [entry()] });
+  seed(broken, 'release-notes/releases/v1.0.0/content.json', '{ nope');
+  await assert.rejects(core.loadReleaseForPreview(opts({ version: '1.0.0', fetch: broken.fetch })), (e) => e.status === 422 && /not valid JSON/.test(e.message));
+
+  const gh = mockGitHub({ releases: [entry()] });
+  seed(gh, 'release-notes/releases/v1.0.0/content.json', JSON.stringify({ items: [] }));
+  seed(gh, 'release-notes/releases/v1.0.0/images/a.png', Buffer.from(png(10, 10)));
+  seed(gh, 'release-notes/releases/v1.0.0/images/nested/b.png', Buffer.from(png(10, 10)));
+  seed(gh, 'release-notes/releases/v2.0.0/images/other.png', Buffer.from(png(10, 10)));
+  const r = await core.loadReleaseForPreview(opts({ version: '1.0.0', fetch: gh.fetch }));
+  assert.deepEqual(r.images.map((i) => i.name), ['a.png'], "only this release's own screenshots are loaded");
+  assert.ok(gh.st.calls.every((c) => c.startsWith('GET')), 'nothing is written');
+});
+
+test('the preview frame stays locked down: no scripts, no popups, and the page CSP is unchanged', () => {
+  const html = fs.readFileSync(path.join(REAL, 'admin/index.html'), 'utf8');
+  assert.match(html, /<iframe[^>]*id="pvFrame"[^>]*sandbox="allow-same-origin"/);
+  assert.ok(!/allow-scripts|allow-popups|allow-forms|allow-top-navigation|allow-modals/.test(html));
+  const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  assert.match(csp, /script-src 'self';/);
+  assert.match(csp, /connect-src 'self' https:\/\/api\.github\.com;/);
+  assert.ok(!/unsafe-|frame-src|\*/.test(csp), 'the CSP gained nothing');
+});
+
+test('the shared renderer is browser-safe: no imports and no Node APIs', () => {
+  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs']) {
+    const src = fs.readFileSync(path.join(REAL, f), 'utf8');
+    assert.ok(!/node:|\bprocess\b|\bBuffer\b|\brequire\(|\bfs\./.test(src), `${f} must not use Node APIs`);
+  }
+  assert.ok(!/^\s*import\s/m.test(fs.readFileSync(path.join(REAL, 'assets/js/render-shared.mjs'), 'utf8')), 'the shared renderer imports nothing');
 });
