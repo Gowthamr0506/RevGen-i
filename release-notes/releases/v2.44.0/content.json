@@ -1,0 +1,22 @@
+{
+  "overview": [
+    "Sample test2"
+  ],
+  "items": [
+    {
+      "category": "enhancement",
+      "title": "Sample test2",
+      "module": "Sample test2",
+      "audience": [
+        "Sample test2"
+      ],
+      "summary": "Sample test2",
+      "body": [
+        {
+          "type": "p",
+          "text": "Sample test2"
+        }
+      ]
+    }
+  ]
+}

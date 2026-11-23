@@ -90,6 +90,15 @@
       "featured": false,
       "title": "This is a sample demo",
       "summary": "This is just to test release note sample"
+    },
+    {
+      "version": "2.44.0",
+      "date": "2026-11-23",
+      "type": "major",
+      "status": "published",
+      "featured": false,
+      "title": "Sample test2",
+      "summary": "Sample test2"
     }
   ]
 }
