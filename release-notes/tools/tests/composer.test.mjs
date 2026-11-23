@@ -272,6 +272,80 @@ test('delete is safe: bad versions never reach the API, drafts can be deleted, a
   assert.ok(![...race.st.files.keys()].some((k) => k.includes('v3.0.0')));
 });
 
+const seed = (gh, file, content) => { gh.st.files.set(file, content); gh.st.commits.get('c0').files.set(file, content); }; // part of the repo's current commit
+
+test('publish / unpublish: one commit that changes only releases.json; the real build then adds or removes the release', async () => {
+  const gh = mockGitHub();
+  const draft = model({ version: '2.0.0', type: 'major', status: 'draft', title: 'Work in progress', items: [{ category: 'new-feature', title: 'Big thing', summary: 'It is big.', body: '', images: [{ name: 'big.png', alt: 'A big thing', caption: '' }] }] });
+  const val = core.validateRelease(draft, { existingVersions: [] });
+  assert.deepEqual(val.errors, []);
+  await core.publish(opts({ entry: val.entry, content: val.content, images: [{ name: 'big.png', bytes: png(50, 30) }], fetch: gh.fetch }));
+  const stageHas = (root) => { // the deploy workflow always runs build, then stage
+    const b = rn(root, 'build'); assert.equal(b.code, 0, b.out);
+    const out = path.join(root, '_site'); const r = rn(root, 'stage', '--out', out); assert.equal(r.code, 0, r.out);
+    return fs.existsSync(path.join(out, 'releases/v2.0.0/index.html'));
+  };
+  assert.equal(stageHas(materialize(gh.st)), false, 'a draft is not on the website');
+
+  const preview = await core.previewStatusChange(opts({ version: '2.0.0', to: 'published', fetch: gh.fetch }));
+  assert.deepEqual([preview.from, preview.errors], ['draft', []]);
+  const before = new Map(gh.st.files), calls = gh.st.calls.length, progress = [];
+  const res = await core.setReleaseStatus(opts({ version: '2.0.0', to: 'published', fetch: gh.fetch, onProgress: (t) => progress.push(t) }));
+  assert.equal(res.status, 'published');
+  assert.ok(progress.some((t) => /Checking the release is complete/.test(t)));
+  assert.equal(gh.st.calls.slice(calls).filter((c) => c.startsWith('PATCH')).length, 1, 'exactly one commit');
+  const changed = [...gh.st.files.keys()].filter((k) => !before.has(k) || gh.st.files.get(k) !== before.get(k));
+  assert.deepEqual(changed, ['release-notes/releases.json'], 'only the release list changes; the release files are not touched');
+  assert.equal(JSON.parse(gh.st.files.get('release-notes/releases.json')).releases[0].status, 'published');
+  assert.equal(stageHas(materialize(gh.st)), true, 'now it is on the website');
+
+  const back = await core.setReleaseStatus(opts({ version: '2.0.0', to: 'draft', fetch: gh.fetch }));
+  assert.equal(back.status, 'draft');
+  assert.equal(stageHas(materialize(gh.st)), false, 'unpublished: gone from the website, files still in the repo');
+  assert.ok(gh.st.files.has('release-notes/releases/v2.0.0/content.json') && gh.st.files.has('release-notes/releases/v2.0.0/images/big.png'));
+  await assert.rejects(core.setReleaseStatus(opts({ version: '2.0.0', to: 'draft', fetch: gh.fetch })), (e) => e.status === 409 && /already a draft/.test(e.message));
+});
+
+test('an incomplete draft is refused with plain reasons and nothing is written', async () => {
+  const entry = (extra) => ({ version: '1.0.0', date: '2026-01-01', type: 'major', status: 'draft', featured: false, title: 'T', ...extra });
+  const gh = mockGitHub({ releases: [entry({})] });
+  seed(gh, 'release-notes/releases/v1.0.0/content.json', JSON.stringify({ items: [] }));
+  const p = await core.previewStatusChange(opts({ version: '1.0.0', to: 'published', fetch: gh.fetch }));
+  assert.match(p.errors.join(' | '), /no summary/);
+  assert.match(p.errors.join(' | '), /at least one item/);
+  const calls = gh.st.calls.length;
+  await assert.rejects(core.setReleaseStatus(opts({ version: '1.0.0', to: 'published', fetch: gh.fetch })), (e) => e.status === 422 && Array.isArray(e.errors) && e.errors.length >= 2 && /cannot be published yet/.test(e.message));
+  assert.ok(!gh.st.calls.slice(calls).some((c) => c.startsWith('POST') || c.startsWith('PATCH')), 'nothing was written');
+
+  const broken = mockGitHub({ releases: [entry({ summary: 'ok' })] });
+  seed(broken, 'release-notes/releases/v1.0.0/content.json', JSON.stringify({ items: [{ category: 'bug-fix', title: 'x', summary: 'y', body: [{ type: 'image', src: 'images/missing.png', alt: 'a' }] }] }));
+  assert.match((await core.previewStatusChange(opts({ version: '1.0.0', to: 'published', fetch: broken.fetch }))).errors.join(), /has not been attached/);
+
+  const noContent = mockGitHub({ releases: [entry({ summary: 'ok' })] });
+  assert.match((await core.previewStatusChange(opts({ version: '1.0.0', to: 'published', fetch: noContent.fetch }))).errors.join(), /content\.json is missing/);
+
+  const custom = mockGitHub({ releases: [entry({ summary: 'ok', page: 'custom' })] });
+  assert.match((await core.previewStatusChange(opts({ version: '1.0.0', to: 'published', fetch: custom.fetch }))).errors.join(), /custom page/);
+  seed(custom, 'release-notes/releases/v1.0.0/index.html', '<html></html>');
+  assert.deepEqual((await core.previewStatusChange(opts({ version: '1.0.0', to: 'published', fetch: custom.fetch }))).errors, [], 'a hand-written page only needs its index.html');
+
+  const idle = mockGitHub();
+  for (const bad of ['../x', '1.0', 'v1.0.0']) await assert.rejects(core.setReleaseStatus(opts({ version: bad, to: 'published', fetch: idle.fetch })), /not a version number/);
+  await assert.rejects(core.setReleaseStatus(opts({ version: '1.0.0', to: 'archived', fetch: idle.fetch })), /must be "published" or "draft"/);
+  assert.equal(idle.st.calls.length, 0, 'invalid requests never reach the API');
+  await assert.rejects(core.previewStatusChange(opts({ version: '4.0.0', to: 'published', fetch: idle.fetch })), (e) => e.status === 404);
+});
+
+test('changing status retries after a race, and refuses a release that is already in that state', async () => {
+  const gh = mockGitHub({ releases: [{ version: '1.0.0', date: '2026-01-01', type: 'major', status: 'published', featured: false, title: 'T', summary: 'S' }], raceOnce: true });
+  const progress = [];
+  const res = await core.setReleaseStatus(opts({ version: '1.0.0', to: 'draft', fetch: gh.fetch, onProgress: (t) => progress.push(t) }));
+  assert.ok(progress.some((t) => /trying again/.test(t)));
+  assert.equal(gh.st.head, res.commitSha);
+  assert.equal(JSON.parse(gh.st.files.get('release-notes/releases.json')).releases[0].status, 'draft');
+  await assert.rejects(core.setReleaseStatus(opts({ version: '1.0.0', to: 'draft', fetch: gh.fetch })), (e) => e.status === 409);
+});
+
 test('checkGone: only says "gone" once the list no longer has it AND the page is a 404', async () => {
   const base = 'https://x.example/RevGen-i/';
   const steps = [
