@@ -127,22 +127,22 @@
         </section>
 
         <section class="panel" id="changes" aria-labelledby="h-changes">
-          <div class="panel-head"><span class="num" aria-hidden="true">2</span><div><h2 id="h-changes" class="panel-title">What changed</h2><p class="muted small">Add one item for each change. Pick what kind of change it is, say what happened, and add screenshots if they help.</p></div></div>
+          <div class="panel-head"><span class="num" aria-hidden="true">2</span><div><h2 id="h-changes" class="panel-title">What changed</h2><p class="muted small">Add one item for each change (a feature, an enhancement, a fix). Pick what kind of change it is, give it a short description, then break it into sections: each section has its own explanation and screenshots, shown as Section 1, Section 2 and so on.</p></div></div>
           <div id="items"></div>
           <div class="actions between">
             <button class="btn btn-outline" id="addItem" type="button">Add another item</button>
             <label class="check-row compact"><input id="optimize" type="checkbox" checked><span>Shrink screenshots (WebP, at most 1800 px wide): small files, sharp text</span></label>
           </div>
           <details class="help">
-            <summary>How to write the details</summary>
-            <p class="muted small">The buttons above each <em>Details</em> box add the formatting for you. You can also type it:</p>
+            <summary>How to write the explanation</summary>
+            <p class="muted small">The buttons above each <em>Explanation</em> box add the formatting for you. You can also type it:</p>
             <ul class="syntax">
               <li>A <strong>blank line</strong> starts a new paragraph.</li>
               <li><code>- text</code> makes a bullet and <code>1. text</code> a numbered list.</li>
               <li><code>## Heading</code> adds a sub-heading.</li>
               <li><code>&gt; text</code> makes a note box and <code>!&gt; text</code> an important box.</li>
               <li><code>### Step title</code> starts a numbered step. The text, notes and screenshots below it belong to that step.</li>
-              <li><code>[[image 2]]</code> on its own line places this item's screenshot number 2 right there. Screenshots you do not place appear after the text.</li>
+              <li><code>[[image 2]]</code> on its own line places this section's screenshot number 2 right there. Screenshots you do not place appear after the text of the same section.</li>
               <li>Inside any text: <code>**bold**</code>, <code>`code`</code> and <code>[label](https://example.com)</code>.</li>
             </ul>
           </details>

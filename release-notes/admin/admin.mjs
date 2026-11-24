@@ -23,14 +23,17 @@ const state = {
   conn: null, connecting: false, items: [], links: [], typeTouched: false, jsonOverride: false, busy: false, done: false, managing: false, previewing: false,
   ready: null, view: null, issues: null, tried: false, tab: 'add', filter: 'all', query: '',
 };
-const newItem = () => ({ category: '', title: '', module: '', audience: '', summary: '', body: '', images: [], collapsed: false });
+// A feature holds one or more sections; each section has its own title, explanation and screenshots.
+const newSection = () => ({ title: '', body: '', images: [], collapsed: false });
+const newItem = () => ({ category: '', title: '', module: '', audience: '', summary: '', sections: [newSection()], collapsed: false });
+const allImages = () => state.items.flatMap((it) => it.sections.flatMap((s) => s.images));
 
 /* ------------------------------------------------------------------ small UI helpers */
 function setStatus(el, text, kind = '') { el.textContent = text; el.className = `status ${kind}`.trim(); }
 const getCfg = () => ({ owner: $('#owner').value.trim(), repo: $('#repo').value.trim(), branch: $('#branch').value.trim() || 'main', token: $('#token').value.trim() });
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const siteBase = () => state.conn?.site?.url || `${location.origin}${location.pathname.replace(/admin\/(index\.html)?$/, '')}`;
-const allNames = () => new Set(state.items.flatMap((it) => it.images.map((im) => im.name)));
+const allNames = () => new Set(allImages().map((im) => im.name));
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /* ------------------------------------------------------------------ connection */
@@ -132,10 +135,10 @@ async function prepareImage(file, optimize) {
   return plain;
 }
 
-async function addImages(i, files, where = '') {
-  const it = state.items[i];
-  if (!it) return;
-  const taken = allNames(), notes = [], before = it.images.length;
+async function addImages(i, j, files, where = '') {
+  const it = state.items[i], sec = it?.sections[j];
+  if (!sec) return;
+  const taken = allNames(), notes = [], before = sec.images.length;
   for (const file of files) {
     if (!/^image\//.test(file.type)) { notes.push(`${file.name} is not an image and was skipped.`); continue; }
     const p = await prepareImage(file, $('#optimize').checked);
@@ -143,15 +146,16 @@ async function addImages(i, files, where = '') {
     if (p.ext && !base.endsWith(p.ext)) base = base.replace(/\.[a-z0-9]+$/, '') + p.ext;
     const name = core.uniqueName(base, taken);
     const note = p.size < p.original ? `shrunk from ${fmtBytes(p.original)} to ${fmtBytes(p.size)}` : '';
-    it.images.push({ name, alt: '', caption: '', bytes: p.bytes, size: p.size, note, url: URL.createObjectURL(new Blob([p.bytes], { type: MIME[p.ext] || 'image/png' })) });
+    sec.images.push({ name, alt: '', caption: '', bytes: p.bytes, size: p.size, note, url: URL.createObjectURL(new Blob([p.bytes], { type: MIME[p.ext] || 'image/png' })) });
   }
-  const added = it.images.length - before;
-  it.notice = [added ? `${plural(added, 'screenshot')} added${where}. Describe each one below.` : '', ...notes].filter(Boolean).join(' ');
-  it.collapsed = false;
+  const added = sec.images.length - before;
+  sec.notice = [added ? `${plural(added, 'screenshot')} added${where}. Describe each one below.` : '', ...notes].filter(Boolean).join(' ');
+  it.collapsed = false; sec.collapsed = false;
   renderItems();
   scheduleCheck();
   if (added) { // the next thing to do is describe it
-    const row = $$('.item-form')[i] && $$('.shot-row', $$('.item-form')[i])[before];
+    const secEl = $$('.item-form')[i] && $$('.part', $$('.item-form')[i])[j];
+    const row = secEl && $$('.shot-row', secEl)[before];
     const alt = row && $('[data-img=alt]', row);
     if (alt) { alt.scrollIntoView({ block: 'nearest', behavior: smooth() }); alt.focus({ preventScroll: true }); }
   }
@@ -196,30 +200,58 @@ function itemHtml(it, i) {
           <div class="field"><label for="it-audience-${i}">Who it is for <span class="opt">optional</span></label><input id="it-audience-${i}" type="text" data-f="audience" autocomplete="off" placeholder="e.g. Leads, Managers" value="${esc(it.audience)}"></div>
         </div>
         <div class="field" data-fk="desc"><label for="it-summary-${i}">Short description</label><textarea id="it-summary-${i}" data-f="summary" rows="2" placeholder="One or two sentences.">${esc(it.summary)}</textarea><small class="field-msg"></small></div>
-        <div class="field"><label for="it-body-${i}">Details <span class="opt">optional</span></label>
-          <div class="tb" role="toolbar" aria-label="Formatting for the details">${TOOLS.map(([k, label, tip]) => `<button type="button" data-fmt="${k}" title="${tip}">${label}</button>`).join('')}</div>
-          <textarea id="it-body-${i}" data-f="body" rows="6" placeholder="Explain more, or write numbered steps. The buttons above add the formatting.">${esc(it.body)}</textarea>
-        </div>
-        <div class="shots">
-          <div class="shots-head"><strong>Screenshots</strong><span class="muted small">${it.images.length ? `${it.images.length} added` : 'optional'}</span></div>
-          <div class="drop"><span>Drag screenshots here, paste with <kbd>Ctrl</kbd> + <kbd>V</kbd>, or</span><label class="btn btn-outline btn-sm file-btn">Choose files<input type="file" class="sr" data-act="add-images" accept="image/*" multiple></label></div>
-          ${it.notice ? `<p class="hint">${esc(it.notice)}</p>` : ''}
-          <ul class="shot-list">${it.images.map((im, k) => `
-            <li class="shot-row" data-k="${k}">
-              <img class="thumb" src="${im.url}" alt="Preview of ${esc(im.name)}">
-              <div>
-                <div class="shot-title"><strong>Screenshot ${k + 1}</strong><code>[[image ${k + 1}]]</code><span class="muted">${esc(im.name)} · ${fmtBytes(im.size)}${im.note ? ` (${esc(im.note)})` : ''}</span></div>
-                <div class="field" data-fk="alt"><label for="it-alt-${i}-${k}">Describe what the screenshot shows</label><input id="it-alt-${i}-${k}" type="text" data-img="alt" autocomplete="off" placeholder="e.g. The Users screen with the Add User window open" value="${esc(im.alt)}"><small class="field-msg"></small></div>
-                <div class="field"><label for="it-cap-${i}-${k}">Caption <span class="opt">optional</span></label><input id="it-cap-${i}-${k}" type="text" data-img="caption" autocomplete="off" value="${esc(im.caption)}"></div>
-              </div>
-              <div class="shot-actions">
-                <button type="button" class="btn btn-outline btn-sm" data-act="insert-image" title="Put this screenshot at the cursor in the details">Place in details</button>
-                <button type="button" class="btn btn-outline btn-sm" data-act="remove-image">Remove</button>
-              </div>
-            </li>`).join('')}</ul>
+        <div class="parts">
+          <div class="parts-head"><strong>Sections</strong><span class="muted small">Break a feature into parts. Each section has its own explanation and screenshots. With two or more, the page numbers them Section 1, Section 2 and so on.</span></div>
+          ${it.sections.map((s, j) => sectionHtml(it, i, s, j)).join('')}
+          <button type="button" class="btn btn-outline" data-act="add-section">Add a section</button>
         </div>
       </div>
     </article>`;
+}
+
+/** One numbered part of a feature: a title, an explanation (with the formatting buttons) and its own screenshots. */
+function sectionHtml(it, i, s, j) {
+  const many = it.sections.length > 1, tag = `${i}-${j}`, name = s.title.trim();
+  return `
+        <div class="part" data-s="${j}">
+          <div class="part-bar">
+            <button type="button" class="part-toggle" data-act="toggle-section" aria-expanded="${!s.collapsed}" aria-controls="part-body-${tag}">
+              <span class="part-n">Section ${j + 1}</span>
+              <span class="part-name${name ? '' : ' empty'}">${esc(name || 'No title yet')}</span>
+              <span class="item-caret" aria-hidden="true"></span>
+            </button>
+            ${many ? `<span class="part-tools">
+              <button type="button" class="btn btn-outline btn-sm" data-act="section-up"${j === 0 ? ' disabled' : ''} aria-label="Move section ${j + 1} up">Up</button>
+              <button type="button" class="btn btn-outline btn-sm" data-act="section-down"${j === it.sections.length - 1 ? ' disabled' : ''} aria-label="Move section ${j + 1} down">Down</button>
+              <button type="button" class="btn btn-outline btn-sm" data-act="remove-section" aria-label="Remove section ${j + 1}">Remove</button>
+            </span>` : ''}
+          </div>
+          <div class="part-body" id="part-body-${tag}"${s.collapsed ? ' hidden' : ''}>
+            <div class="field"><label for="it-st-${tag}">Section title <span class="opt">optional</span></label><input id="it-st-${tag}" type="text" data-sf="title" maxlength="140" autocomplete="off" placeholder="e.g. Turn the toggle on" value="${esc(s.title)}"></div>
+            <div class="field" data-fk="sbody"><label for="it-body-${tag}">Explanation</label>
+              <div class="tb" role="toolbar" aria-label="Formatting for the explanation">${TOOLS.map(([k, label, tip]) => `<button type="button" data-fmt="${k}" title="${tip}">${label}</button>`).join('')}</div>
+              <textarea id="it-body-${tag}" data-sf="body" rows="6" placeholder="Explain this part. The buttons above add the formatting.">${esc(s.body)}</textarea><small class="field-msg"></small>
+            </div>
+            <div class="shots">
+              <div class="shots-head"><strong>Screenshots for this section</strong><span class="muted small">${s.images.length ? `${s.images.length} added` : 'optional'}</span></div>
+              <div class="drop"><span>Drag screenshots here, paste with <kbd>Ctrl</kbd> + <kbd>V</kbd>, or</span><label class="btn btn-outline btn-sm file-btn">Choose files<input type="file" class="sr" data-act="add-images" accept="image/*" multiple></label></div>
+              ${s.notice ? `<p class="hint">${esc(s.notice)}</p>` : ''}
+              <ul class="shot-list">${s.images.map((im, k) => `
+                <li class="shot-row" data-k="${k}">
+                  <img class="thumb" src="${im.url}" alt="Preview of ${esc(im.name)}">
+                  <div>
+                    <div class="shot-title"><strong>Screenshot ${k + 1}</strong><code>[[image ${k + 1}]]</code><span class="muted">${esc(im.name)} · ${fmtBytes(im.size)}${im.note ? ` (${esc(im.note)})` : ''}</span></div>
+                    <div class="field" data-fk="alt"><label for="it-alt-${tag}-${k}">Describe what the screenshot shows</label><input id="it-alt-${tag}-${k}" type="text" data-img="alt" autocomplete="off" placeholder="e.g. The Users screen with the Add User window open" value="${esc(im.alt)}"><small class="field-msg"></small></div>
+                    <div class="field"><label for="it-cap-${tag}-${k}">Caption <span class="opt">optional</span></label><input id="it-cap-${tag}-${k}" type="text" data-img="caption" autocomplete="off" value="${esc(im.caption)}"></div>
+                  </div>
+                  <div class="shot-actions">
+                    <button type="button" class="btn btn-outline btn-sm" data-act="insert-image" title="Put this screenshot at the cursor in the explanation">Place in text</button>
+                    <button type="button" class="btn btn-outline btn-sm" data-act="remove-image">Remove</button>
+                  </div>
+                </li>`).join('')}</ul>
+            </div>
+          </div>
+        </div>`;
 }
 
 function renderItems() {
@@ -243,6 +275,22 @@ function setCollapsed(i, collapsed) {
   state.items[i].collapsed = collapsed;
   $('.item-body', form).hidden = collapsed;
   $('.item-toggle', form).setAttribute('aria-expanded', String(!collapsed));
+}
+
+const secEl = (i, j) => { const f = $$('.item-form')[i]; return f ? $$('.part', f)[j] : null; };
+function setSecCollapsed(i, j, collapsed) {
+  const el = secEl(i, j);
+  if (!el) return;
+  state.items[i].sections[j].collapsed = collapsed;
+  $('.part-body', el).hidden = collapsed;
+  $('.part-toggle', el).setAttribute('aria-expanded', String(!collapsed));
+}
+function refreshSecHead(i, j) {
+  const el = secEl(i, j), s = state.items[i]?.sections[j];
+  if (!el || !s) return;
+  const name = s.title.trim(), nameEl = $('.part-name', el);
+  nameEl.textContent = name || 'No title yet';
+  nameEl.classList.toggle('empty', !name);
 }
 
 function refreshItemHead(i) {
@@ -279,16 +327,22 @@ function applyIssues() {
     setMsg($('[data-fk=category]', form), o.category, now);
     setMsg($('[data-fk=title]', form), o.title, now);
     setMsg($('[data-fk=desc]', form), o.desc, now);
-    $$('.shot-row', form).forEach((row, k) => setMsg($('[data-fk=alt]', row), o.shots[k], now));
-    const n = [o.category, o.title, o.desc, ...o.shots].filter(Boolean).length;
+    $$('.part', form).forEach((sec, j) => {
+      const so = o.secs[j];
+      if (!so) return;
+      setMsg($('[data-fk=sbody]', sec), so.empty, now);
+      $$('.shot-row', sec).forEach((row, k) => setMsg($('[data-fk=alt]', row), so.shots[k], now));
+    });
+    const n = [o.category, o.title, o.desc, ...o.secs.flatMap((s) => [s.empty, ...s.shots])].filter(Boolean).length;
     const flag = $('.item-flag', form);
     flag.hidden = !(n && (now || $('.touched', form)));
     flag.textContent = n ? `${n} to fix` : '';
   });
 }
 
-function focusField(sel, item) {
+function focusField(sel, item, sec = -1) {
   if (item >= 0 && state.items[item]?.collapsed) setCollapsed(item, false);
+  if (item >= 0 && sec >= 0 && state.items[item]?.sections[sec]?.collapsed) setSecCollapsed(item, sec, false);
   const el = $(sel);
   if (!el) return false;
   el.scrollIntoView({ block: 'center', behavior: smooth() });
@@ -296,7 +350,7 @@ function focusField(sel, item) {
   return true;
 }
 function goToFirstProblem() {
-  for (const p of editor.problemOrder(state.issues)) if (focusField(p.sel, p.item)) return true;
+  for (const p of editor.problemOrder(state.issues)) if (focusField(p.sel, p.item, p.sec ?? -1)) return true;
   $('#checks').scrollIntoView({ block: 'center', behavior: smooth() });
   return false;
 }
@@ -352,7 +406,7 @@ function flash(text) { // a short message in the bar (until the next check)
 
 function runChecks() {
   const model = readModel();
-  const ctx = { existingVersions: (state.conn?.releases || []).map((r) => r.version), imageSizes: Object.fromEntries(state.items.flatMap((it) => it.images.map((im) => [im.name, im.size]))) };
+  const ctx = { existingVersions: (state.conn?.releases || []).map((r) => r.version), imageSizes: Object.fromEntries(allImages().map((im) => [im.name, im.size])) };
   const gen = core.validateRelease(model, ctx);
   let errors = gen.errors, warnings = gen.warnings, content = gen.content;
   if (!state.jsonOverride) $('#json').value = JSON.stringify(gen.content, null, 2);
@@ -378,8 +432,8 @@ function runChecks() {
 
   const counts = {};
   (content?.items || []).forEach((it) => { counts[it.category] = (counts[it.category] || 0) + 1; });
-  const shots = state.items.reduce((n, it) => n + it.images.length, 0);
-  const bytes = state.items.reduce((n, it) => n + it.images.reduce((m, im) => m + im.size, 0), 0);
+  const shots = allImages().length;
+  const bytes = allImages().reduce((m, im) => m + im.size, 0);
   $('#summaryBox').innerHTML = [
     `<span class="chip type-${esc(model.type)}">v${esc(model.version || '?')}</span>`,
     `<span class="chip">${esc(model.date || 'no date')}</span>`,
@@ -425,7 +479,10 @@ function restoreDraft(d) {
   $('#featured').checked = f.featured; $('#title').value = f.title; $('#summary').value = f.summary; $('#tags').value = f.tags; $('#overview').value = f.overview;
   state.typeTouched = true;
   state.links = d.links;
-  state.items = d.items.length ? d.items.map((it) => ({ ...newItem(), category: it.category, title: it.title, module: it.module, audience: it.audience, summary: it.summary, body: it.body })) : [newItem()];
+  state.items = d.items.length ? d.items.map((it) => ({
+    ...newItem(), category: it.category, title: it.title, module: it.module, audience: it.audience, summary: it.summary,
+    sections: it.sections.length ? it.sections.map((s) => ({ ...newSection(), title: s.title, body: s.body })) : [newSection()],
+  })) : [newItem()];
   if (state.links.length || f.tags || f.featured) $('#moreOpts').open = true;
   renderItems(); renderLinks();
   touched = true;
@@ -456,7 +513,7 @@ async function doPublish() {
   prog.scrollIntoView({ block: 'center', behavior: smooth() });
   const say = (t) => { const li = document.createElement('li'); li.textContent = t; prog.appendChild(li); };
   try {
-    const images = state.items.flatMap((it) => it.images.map((im) => ({ name: im.name, bytes: im.bytes })));
+    const images = allImages().map((im) => ({ name: im.name, bytes: im.bytes }));
     const res = await core.publish({ ...cfg, entry, content, images, message: `Add release ${entry.version}: ${entry.title}`, onProgress: say });
     state.done = true; state.busy = false;
     store.del(editor.DRAFT_KEY);
@@ -620,7 +677,7 @@ async function previewForm() {
   runChecks();
   if (!state.view) { flash('The JSON has a mistake, so there is nothing to preview yet. Fix it or press “Reset from the form”.'); return; }
   const { entry, content, problems } = state.view;
-  const images = Object.fromEntries(state.items.flatMap((it) => it.images.map((im) => [im.name, im.url]))); // the form's own blob urls: the form revokes them
+  const images = Object.fromEntries(allImages().map((im) => [im.name, im.url])); // the form's own blob urls: the form revokes them
   const lead = `${entry.status === 'draft' ? 'This is how the draft will look.' : 'This is how the page will look once it is published.'} Nothing has been saved yet.` +
     (problems ? ` ${plural(problems, 'thing')} still need${problems > 1 ? '' : 's'} fixing before you can publish (listed in step 3).` : '');
   try { await openPreview({ entry, content, images, lead }); }
@@ -888,18 +945,20 @@ addEventListener('scroll', queueSpy, { passive: true });
 $('#items').addEventListener('input', (e) => {
   const form = e.target.closest('.item-form'); if (!form) return;
   const i = +form.dataset.i, it = state.items[i];
-  if (e.target.dataset.f && e.target.type !== 'radio') { it[e.target.dataset.f] = e.target.value; if (e.target.dataset.f === 'title') refreshItemHead(i); }
-  else if (e.target.dataset.img) it.images[+e.target.closest('.shot-row').dataset.k][e.target.dataset.img] = e.target.value;
+  const sec = e.target.closest('.part'), j = sec ? +sec.dataset.s : -1; // which section of the feature the field belongs to
+  if (e.target.dataset.sf && j >= 0) { it.sections[j][e.target.dataset.sf] = e.target.value; if (e.target.dataset.sf === 'title') refreshSecHead(i, j); }
+  else if (e.target.dataset.f && e.target.type !== 'radio') { it[e.target.dataset.f] = e.target.value; if (e.target.dataset.f === 'title') refreshItemHead(i); }
+  else if (e.target.dataset.img && j >= 0) it.sections[j].images[+e.target.closest('.shot-row').dataset.k][e.target.dataset.img] = e.target.value;
   scheduleCheck();
 });
 $('#items').addEventListener('change', (e) => {
   const form = e.target.closest('.item-form'); if (!form) return;
   const i = +form.dataset.i;
   if (e.target.dataset.f === 'category') { state.items[i].category = e.target.value; refreshItemHead(i); scheduleCheck(); }
-  if (e.target.dataset.act === 'add-images') { const files = [...e.target.files]; e.target.value = ''; addImages(i, files); }
+  if (e.target.dataset.act === 'add-images') { const files = [...e.target.files], j = +e.target.closest('.part').dataset.s; e.target.value = ''; addImages(i, j, files); }
 });
 
-const bodyBox = (form) => $('[data-f=body]', form);
+const bodyBox = (sec) => $('[data-sf=body]', sec);
 const caretOf = (ta) => (document.activeElement === ta ? [ta.selectionStart, ta.selectionEnd] : ta.dataset.ss !== undefined ? [+ta.dataset.ss, +ta.dataset.se] : [ta.value.length, ta.value.length]);
 function writeBody(ta, r) { // put the new text and selection in the box and tell the page it changed
   ta.value = r.text;
@@ -909,7 +968,7 @@ function writeBody(ta, r) { // put the new text and selection in the box and tel
   ta.dispatchEvent(new Event('input', { bubbles: true }));
 }
 $('#items').addEventListener('focusout', (e) => {
-  if (e.target.matches && e.target.matches('[data-f=body]')) { e.target.dataset.ss = e.target.selectionStart; e.target.dataset.se = e.target.selectionEnd; }
+  if (e.target.matches && e.target.matches('[data-sf=body]')) { e.target.dataset.ss = e.target.selectionStart; e.target.dataset.se = e.target.selectionEnd; }
   const f = e.target.closest && e.target.closest('.field');
   if (f && !f.classList.contains('touched')) { f.classList.add('touched'); applyIssues(); }
 });
@@ -917,28 +976,52 @@ $('#items').addEventListener('mousedown', (e) => { if (e.target.closest('.tb but
 $('#items').addEventListener('click', (e) => {
   const fmt = e.target.closest('[data-fmt]');
   if (fmt) {
-    const form = fmt.closest('.item-form'), ta = bodyBox(form), [s, en] = caretOf(ta);
+    const sec = fmt.closest('.part'), ta = bodyBox(sec), [s, en] = caretOf(ta);
     writeBody(ta, editor.applySyntax(ta.value, s, en, fmt.dataset.fmt));
     return;
   }
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const form = b.closest('.item-form'), i = +form.dataset.i, it = state.items[i];
+  const secNode = b.closest('.part'), j = secNode ? +secNode.dataset.s : -1, sec = j >= 0 ? it.sections[j] : null;
+  const armed = (label) => { // removing real work asks for a second click
+    if (b.dataset.armed) return true;
+    b.dataset.armed = '1'; b.textContent = 'Click again to remove';
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = label; } }, 3500);
+    return false;
+  };
   if (b.dataset.act === 'toggle-item') { setCollapsed(i, !it.collapsed); return; }
+  if (b.dataset.act === 'toggle-section') { setSecCollapsed(i, j, !sec.collapsed); return; }
   if (b.dataset.act === 'insert-image') {
-    const ta = bodyBox(form), k = +b.closest('.shot-row').dataset.k, [s, en] = caretOf(ta);
+    const ta = bodyBox(secNode), k = +b.closest('.shot-row').dataset.k, [s, en] = caretOf(ta);
     writeBody(ta, editor.insertImageTag(ta.value, s, en, k + 1));
     return;
   }
-  if (b.dataset.act === 'remove-item') {
-    const has = it.title.trim() || it.summary.trim() || it.body.trim() || it.images.length;
-    if (has && !b.dataset.armed) { // removing real work asks for a second click
-      b.dataset.armed = '1'; b.textContent = 'Click again to remove';
-      setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = 'Remove'; } }, 3500);
-      return;
-    }
-    it.images.forEach((im) => URL.revokeObjectURL(im.url)); state.items.splice(i, 1);
+  if (b.dataset.act === 'add-section') {
+    it.sections.push(newSection()); it.collapsed = false;
+    renderItems(); scheduleCheck();
+    const added = secEl(i, it.sections.length - 1);
+    added?.scrollIntoView({ block: 'nearest', behavior: smooth() });
+    $('[data-sf=title]', added)?.focus({ preventScroll: true });
+    return;
   }
-  if (b.dataset.act === 'remove-image') { const k = +b.closest('.shot-row').dataset.k; URL.revokeObjectURL(it.images[k].url); it.images.splice(k, 1); }
+  if (b.dataset.act === 'section-up' || b.dataset.act === 'section-down') {
+    const to = j + (b.dataset.act === 'section-up' ? -1 : 1);
+    if (to < 0 || to >= it.sections.length) return;
+    [it.sections[j], it.sections[to]] = [it.sections[to], it.sections[j]];
+    renderItems(); scheduleCheck();
+    $(`[data-act=${b.dataset.act}]`, secEl(i, to))?.focus({ preventScroll: true });
+    return;
+  }
+  if (b.dataset.act === 'remove-section') {
+    if ((sec.title.trim() || sec.body.trim() || sec.images.length) && !armed('Remove')) return;
+    sec.images.forEach((im) => URL.revokeObjectURL(im.url)); it.sections.splice(j, 1);
+  }
+  if (b.dataset.act === 'remove-item') {
+    const has = it.title.trim() || it.summary.trim() || it.sections.some((s) => s.title.trim() || s.body.trim() || s.images.length);
+    if (has && !armed('Remove')) return;
+    it.sections.forEach((s) => s.images.forEach((im) => URL.revokeObjectURL(im.url))); state.items.splice(i, 1);
+  }
+  if (b.dataset.act === 'remove-image') { const k = +b.closest('.shot-row').dataset.k; URL.revokeObjectURL(sec.images[k].url); sec.images.splice(k, 1); }
   renderItems(); scheduleCheck();
 });
 $('#addItem').addEventListener('click', () => {
@@ -956,17 +1039,20 @@ $('#items').addEventListener('drop', (e) => {
   const s = dropTarget(e); if (!s) return;
   e.preventDefault(); s.classList.remove('dragging');
   const files = [...(e.dataTransfer?.files || [])];
-  if (files.length) addImages(+s.closest('.item-form').dataset.i, files);
+  if (files.length) addImages(+s.closest('.item-form').dataset.i, +s.closest('.part').dataset.s, files); // into the section it was dropped on
 });
 document.addEventListener('paste', (e) => {
   if (state.tab !== 'add' || pv.dlg.open) return;
   const files = [...(e.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
   if (!files.length) return; // plain text pastes are left alone
-  const form = e.target.closest && e.target.closest('.item-form');
+  // into the section being edited; if the cursor is elsewhere, only when there is no doubt which one is meant
+  const form = e.target.closest && e.target.closest('.item-form'), secNode = e.target.closest && e.target.closest('.part');
   const i = form ? +form.dataset.i : state.items.length === 1 ? 0 : -1;
   if (i < 0) return;
+  const j = secNode ? +secNode.dataset.s : state.items[i].sections.length === 1 ? 0 : -1;
+  if (j < 0) return;
   e.preventDefault();
-  addImages(i, files.map((f) => (/^image\.[a-z]+$/i.test(f.name) || !f.name ? new File([f], `screenshot.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type }) : f)), ' from the clipboard');
+  addImages(i, j, files.map((f) => (/^image\.[a-z]+$/i.test(f.name) || !f.name ? new File([f], `screenshot.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type }) : f)), ' from the clipboard');
 });
 
 $('#links').addEventListener('input', (e) => { const row = e.target.closest('.link-row'); if (row && e.target.dataset.lf) { state.links[+row.dataset.l][e.target.dataset.lf] = e.target.value; scheduleCheck(); } });
@@ -1023,7 +1109,7 @@ $('.seg').addEventListener('click', (e) => {
 $('#relRefresh').addEventListener('click', refreshReleases);
 
 window.addEventListener('beforeunload', (e) => {
-  const typed = $('#title').value.trim() || state.items.some((it) => it.title.trim() || it.summary.trim() || it.images.length);
+  const typed = $('#title').value.trim() || state.items.some((it) => it.title.trim() || it.summary.trim() || it.sections.some((s) => s.title.trim() || s.body.trim() || s.images.length));
   if (typed && !state.done) { e.preventDefault(); e.returnValue = ''; }
 });
 

@@ -11,7 +11,7 @@ export const CATEGORIES = [
 const CATEGORY_IDS = CATEGORIES.map((c) => c.id);
 export const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif'];
 const RESERVED_IDS = ['overview', 'new-features', 'enhancements-improvements', 'bug-fixes'];
-const BLOCK_TYPES = ['p', 'heading', 'list', 'image', 'gallery', 'steps', 'callout'];
+const BLOCK_TYPES = ['p', 'heading', 'list', 'image', 'gallery', 'steps', 'callout', 'section'];
 const LINK_KINDS = ['video', 'demo', 'docs', 'other'];
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MAX_IMAGE_BYTES = 1024 * 1024;
@@ -101,7 +101,7 @@ export function parseBody(text, images = []) {
     if ((m = t.match(/^\[\[\s*image\s+(\d+)\s*\]\]$/i))) {
       flushPara(); flushList();
       const n = Number(m[1]), img = images[n - 1];
-      if (!img) errors.push(`[[image ${n}]] points to a screenshot that has not been added to this item.`);
+      if (!img) errors.push(`[[image ${n}]] points to a screenshot that has not been added to this section.`);
       else { used.add(n - 1); emit({ type: 'image', src: `images/${img.name}`, alt: img.alt, ...(img.caption ? { caption: img.caption } : {}) }); }
       continue;
     }
@@ -138,7 +138,14 @@ export function parseBody(text, images = []) {
 const paragraphs = (t) => String(t || '').replace(/\r\n?/g, '\n').split(/\n\s*\n/).map((p) => p.replace(/\n/g, ' ').trim()).filter(Boolean);
 const csv = (t) => String(t || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-/** model: {overview, links:[{label,url,kind}], items:[{category,title,module,audience,summary,body,images:[{name,alt,caption}]}]} */
+/**
+ * The parts of a feature as the form holds them: [{title, body, images:[{name,alt,caption}]}]. Each part has its own explanation
+ * (body) and screenshots. An older shape (one `body` text and one `images` list on the item) counts as a single part.
+ */
+export const itemSections = (it) => (Array.isArray(it?.sections) && it.sections.length ? it.sections : [{ title: '', body: it?.body ?? '', images: it?.images ?? [] }]);
+const sectionAt = (n, secs, k) => `Item ${n + 1}${secs.length > 1 ? `, section ${k + 1}` : ''}`;
+
+/** model: {overview, links:[{label,url,kind}], items:[{category,title,module,audience,summary, sections:[{title,body,images}]}]} */
 export function buildContent(model) {
   const content = {};
   const overview = paragraphs(model.overview);
@@ -153,9 +160,18 @@ export function buildContent(model) {
     const aud = csv(it.audience);
     if (aud.length) item.audience = aud;
     if (isText(it.summary)) item.summary = it.summary.trim();
-    const { blocks, errors } = parseBody(it.body, it.images || []);
-    errors.forEach((e) => parseErrors.push(`Item ${n + 1}: ${e}`));
-    if (blocks.length) item.body = blocks;
+    // each part of the feature is turned into blocks with its own screenshots; a part with nothing in it is skipped
+    const secs = itemSections(it), parts = [];
+    secs.forEach((s, k) => {
+      const { blocks, errors } = parseBody(s.body, s.images || []);
+      errors.forEach((e) => parseErrors.push(`${sectionAt(n, secs, k)}: ${e}`));
+      const title = String(s.title || '').trim();
+      if (!blocks.length && title) parseErrors.push(`${sectionAt(n, secs, k)} ("${title}"): add some text or a screenshot to this section, or remove it.`);
+      if (blocks.length) parts.push({ title, blocks });
+    });
+    // one untitled part stays plain text, as before; two or more, or a titled one, become numbered "Section 1", "Section 2"...
+    if (parts.length === 1 && !parts[0].title) item.body = parts[0].blocks;
+    else if (parts.length) item.body = parts.map((p) => ({ type: 'section', ...(p.title ? { title: p.title } : {}), body: p.blocks }));
     return item;
   });
   return { content, parseErrors };
@@ -201,9 +217,14 @@ export function validateContent(content, imageNames, { published = true } = {}) 
     else if (ids.has(id)) err(`${at}: the same title is used by item ${ids.get(id)}; make the titles different.`);
     else ids.set(id, n + 1);
     (item.links || []).forEach((l, i) => checkLink(l, `${at}, link ${i + 1}`));
-    (Array.isArray(item.body) ? item.body : []).forEach((b, i) => {
-      const w = `${at}, block ${i + 1}`;
+    const checkBlock = (b, w, nested) => {
       if (!isObj(b) || !BLOCK_TYPES.includes(b.type)) return err(`${w}: unknown block type.`);
+      if (b.type === 'section') { // a numbered part of the feature, with blocks of its own
+        if (nested) return err(`${w}: a section cannot contain another section.`);
+        if (b.title !== undefined && typeof b.title !== 'string') err(`${w}: the section title must be text.`);
+        if (!(Array.isArray(b.body) && b.body.length)) return err(`${w}: a section needs some text or a screenshot.`);
+        return b.body.forEach((inner, k) => checkBlock(inner, `${w}, part ${k + 1}`, true));
+      }
       if ((b.type === 'p' || b.type === 'heading' || b.type === 'callout') && !isText(b.text)) err(`${w}: "text" is required.`);
       if (b.type === 'list' && !(Array.isArray(b.items) && b.items.length && b.items.every(isText))) err(`${w}: the list needs items.`);
       if (b.type === 'image') checkImage(b, w);
@@ -215,7 +236,8 @@ export function validateContent(content, imageNames, { published = true } = {}) 
           (s.images || []).forEach((im, j) => checkImage(im, `${w}, step ${k + 1}, screenshot ${j + 1}`));
         });
       }
-    });
+    };
+    (Array.isArray(item.body) ? item.body : []).forEach((b, i) => checkBlock(b, `${at}, block ${i + 1}`, false));
   });
   for (const name of imageNames) if (!used.has(name) && content.cover?.src !== `images/${name}`) warn(`The screenshot "${name}" is attached but not used anywhere.`);
   return { errors, warnings };
@@ -241,14 +263,17 @@ export function validateMeta(model, ctx = {}) {
 /** Attached screenshots: unique supported file names, alt text, size. Returns the set of names that will exist in images/. */
 export function validateAttachments(model, ctx = {}) {
   const errors = [], warnings = [], names = new Set();
-  (model.items || []).forEach((it, n) => (it.images || []).forEach((im, k) => {
-    const at = `Item ${n + 1}, screenshot ${k + 1}`;
-    if (names.has(im.name)) errors.push(`${at}: the file name "${im.name}" is used twice.`);
-    names.add(im.name);
-    if (!IMAGE_EXT.some((e) => String(im.name).toLowerCase().endsWith(e))) errors.push(`${at}: "${im.name}" is not a supported image type.`);
-    if (!isText(im.alt)) errors.push(`${at}: add alt text describing the screenshot (needed for screen readers).`);
-    if ((ctx.imageSizes || {})[im.name] > MAX_IMAGE_BYTES) warnings.push(`"${im.name}" is over 1 MB; turn on "Optimize screenshots" or use a smaller image.`);
-  }));
+  (model.items || []).forEach((it, n) => {
+    const secs = itemSections(it);
+    secs.forEach((s, j) => (s.images || []).forEach((im, k) => {
+      const at = `${sectionAt(n, secs, j)}, screenshot ${k + 1}`;
+      if (names.has(im.name)) errors.push(`${at}: the file name "${im.name}" is used twice.`);
+      names.add(im.name);
+      if (!IMAGE_EXT.some((e) => String(im.name).toLowerCase().endsWith(e))) errors.push(`${at}: "${im.name}" is not a supported image type.`);
+      if (!isText(im.alt)) errors.push(`${at}: add alt text describing the screenshot (needed for screen readers).`);
+      if ((ctx.imageSizes || {})[im.name] > MAX_IMAGE_BYTES) warnings.push(`"${im.name}" is over 1 MB; turn on "Optimize screenshots" or use a smaller image.`);
+    }));
+  });
   return { errors, warnings, names };
 }
 

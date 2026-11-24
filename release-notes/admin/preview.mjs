@@ -36,7 +36,12 @@ export function prepare(entry, content, today) {
     }
     const it = { ...raw };
     if (it.id !== undefined && !ITEM_ID.test(String(it.id))) delete it.id; // the title's slug is used instead
-    if (Array.isArray(it.body)) it.body = it.body.map((b) => (isObj(b) && b.type === 'callout' && b.tone !== 'important' ? { ...b, tone: 'note' } : b));
+    const tidy = (blocks) => blocks.map((b) => {
+      if (isObj(b) && b.type === 'callout' && b.tone !== 'important') return { ...b, tone: 'note' };
+      if (isObj(b) && b.type === 'section' && Array.isArray(b.body)) return { ...b, body: tidy(b.body) }; // a section holds blocks of its own
+      return b;
+    });
+    if (Array.isArray(it.body)) it.body = tidy(it.body);
     c.items.push(it);
   });
   return { entry: e, content: c, missing, omitted };

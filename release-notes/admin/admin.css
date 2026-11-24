@@ -147,6 +147,24 @@ code{white-space:nowrap}
 .cat input:checked+.cat-in{border-color:var(--blue);background:var(--blue-wash);outline:1px solid var(--blue)}
 .cat input:focus-visible+.cat-in{outline:2px solid var(--blue);outline-offset:2px}
 
+/* ---- the parts (sections) of a feature: each with its own title, explanation and screenshots ---- */
+.parts{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.parts-head{display:flex;flex-direction:column;gap:2px;margin-bottom:14px;max-width:72ch}
+.parts>.btn{margin-top:2px}
+.part{margin-bottom:12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--wash)}
+.part-bar{display:flex;align-items:center;gap:8px;padding:6px 8px}
+.part-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:6px 8px;border:0;border-radius:var(--r-sm);background:none;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.part-toggle:hover{background:rgba(25,40,57,.06)}
+.part-toggle:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.part-toggle[aria-expanded=false] .item-caret{transform:rotate(-45deg);margin:0 4px 0 2px}
+.part-n{flex:none;font:500 12px/1 var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--link);background:var(--blue-wash);border-radius:var(--r-sm);padding:5px 8px;white-space:nowrap}
+.part-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 15px/1.3 var(--f-body);letter-spacing:-.01em}
+.part-name.empty{color:var(--ink-3);font-weight:400}
+.part-tools{display:flex;flex:none;gap:6px}
+.part-body{padding:0 16px 16px;border-top:1px solid var(--line);background:var(--bg);border-radius:0 0 var(--r-sm) var(--r-sm)}
+.part-body[hidden]{display:none}
+@media (max-width:560px){.part-bar{flex-wrap:wrap}.part-tools{width:100%;padding:0 4px 4px}}
+
 .tb{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
 .tb button{height:30px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg);font:500 13px/1 var(--f-body);color:var(--ink-2);cursor:pointer}
 .tb button:hover{border-color:var(--ink-2);background:var(--wash);color:var(--ink)}

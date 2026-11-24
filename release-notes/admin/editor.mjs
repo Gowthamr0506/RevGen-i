@@ -1,7 +1,7 @@
 // Pure helpers for the composer page's editing comforts: the formatting buttons for the Details box, problems shown next
 // to each field, and the locally saved draft. No DOM and no network, so they run in the browser and in Node
 // (tools/tests/composer.test.mjs tests them).
-import { CATEGORIES, isIsoDate, isSemver } from './core.mjs';
+import { CATEGORIES, isIsoDate, isSemver, itemSections } from './core.mjs';
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const hasText = (v) => typeof v === 'string' && v.trim() !== '';
@@ -85,39 +85,50 @@ export function fieldIssues(model, ctx = {}) {
   if (!hasText(model.title)) meta.title = 'Add a title.';
   if (!hasText(model.summary) && model.status !== 'draft') meta.summary = 'Add a summary of one or two sentences.';
   const items = (model.items || []).map((it) => {
-    const o = {};
+    const o = {}, secs = itemSections(it);
     if (!CATEGORIES.some((c) => c.id === it.category)) o.category = 'Choose what kind of change this is.';
     if (!hasText(it.title)) o.title = 'Add a title.';
-    if (!hasText(it.summary) && !hasText(it.body)) o.desc = 'Add a short description or some details.';
-    o.shots = (it.images || []).map((im) => (hasText(im.alt) ? '' : 'Describe what the screenshot shows, for people who cannot see it.'));
+    if (!hasText(it.summary) && !secs.some((s) => hasText(s.body))) o.desc = 'Add a short description or some details.';
+    // each section: a titled one needs something in it (an untitled empty one is simply left out); screenshots need a description
+    o.secs = secs.map((s) => ({
+      empty: hasText(s.title) && !hasText(s.body) && !(s.images || []).length ? 'Add some text or a screenshot to this section, or remove it.' : '',
+      shots: (s.images || []).map((im) => (hasText(im.alt) ? '' : 'Describe what the screenshot shows, for people who cannot see it.')),
+    }));
     return o;
   });
-  const itemOk = (o) => !o.category && !o.title && !o.desc && o.shots.every((s) => !s);
+  const itemOk = (o) => !o.category && !o.title && !o.desc && o.secs.every((s) => !s.empty && s.shots.every((x) => !x));
   return { meta, items, detailsOk: Object.keys(meta).length === 0, changesOk: items.length > 0 && items.every(itemOk) };
 }
 
 /** Selectors of the fields that have a problem, in the order they appear on the page. */
 export function problemOrder(issues) {
   const out = [];
-  for (const k of ['version', 'date', 'title', 'summary']) if (issues.meta[k]) out.push({ sel: `#${k}`, item: -1 });
+  for (const k of ['version', 'date', 'title', 'summary']) if (issues.meta[k]) out.push({ sel: `#${k}`, item: -1, sec: -1 });
   issues.items.forEach((o, i) => {
-    if (o.category) out.push({ sel: `.item-form[data-i="${i}"] input[data-f="category"]`, item: i });
-    if (o.title) out.push({ sel: `.item-form[data-i="${i}"] [data-f="title"]`, item: i });
-    if (o.desc) out.push({ sel: `.item-form[data-i="${i}"] [data-f="summary"]`, item: i });
-    o.shots.forEach((s, k) => { if (s) out.push({ sel: `.item-form[data-i="${i}"] .shot-row[data-k="${k}"] [data-img="alt"]`, item: i }); });
+    const at = `.item-form[data-i="${i}"]`;
+    if (o.category) out.push({ sel: `${at} input[data-f="category"]`, item: i, sec: -1 });
+    if (o.title) out.push({ sel: `${at} [data-f="title"]`, item: i, sec: -1 });
+    if (o.desc) out.push({ sel: `${at} [data-f="summary"]`, item: i, sec: -1 });
+    o.secs.forEach((s, j) => {
+      if (s.empty) out.push({ sel: `${at} .part[data-s="${j}"] [data-sf="body"]`, item: i, sec: j });
+      s.shots.forEach((m, k) => { if (m) out.push({ sel: `${at} .part[data-s="${j}"] .shot-row[data-k="${k}"] [data-img="alt"]`, item: i, sec: j }); });
+    });
   });
   return out;
 }
 
 /** Where a validation message points: {sel, item} for a field to focus, or null when it is about the whole release. */
 export function jumpTarget(message) {
-  const m = String(message).match(/^Item (\d+)/);
-  if (m) return { sel: `.item-form[data-i="${Number(m[1]) - 1}"]`, item: Number(m[1]) - 1 };
-  if (/^Version/.test(message)) return { sel: '#version', item: -1 };
-  if (/release date/i.test(message)) return { sel: '#date', item: -1 };
-  if (/release title/i.test(message)) return { sel: '#title', item: -1 };
-  if (/summary/i.test(message)) return { sel: '#summary', item: -1 };
-  if (/^The JSON/.test(message)) return { sel: '#json', item: -1 };
+  const m = String(message).match(/^Item (\d+)(?:[^,:(]*)?(?:, section (\d+))?/);
+  if (m) {
+    const item = Number(m[1]) - 1, at = `.item-form[data-i="${item}"]`;
+    return m[2] ? { sel: `${at} .part[data-s="${Number(m[2]) - 1}"]`, item, sec: Number(m[2]) - 1 } : { sel: at, item, sec: -1 };
+  }
+  if (/^Version/.test(message)) return { sel: '#version', item: -1, sec: -1 };
+  if (/release date/i.test(message)) return { sel: '#date', item: -1, sec: -1 };
+  if (/release title/i.test(message)) return { sel: '#title', item: -1, sec: -1 };
+  if (/summary/i.test(message)) return { sel: '#summary', item: -1, sec: -1 };
+  if (/^The JSON/.test(message)) return { sel: '#json', item: -1, sec: -1 };
   return null;
 }
 
@@ -137,8 +148,8 @@ export function makeDraft({ form, links, items }, now = Date.now()) {
     },
     links: (links || []).map((l) => ({ label: str(l.label), url: str(l.url), kind: l.kind })),
     items: (items || []).map((it) => ({
-      category: it.category, title: str(it.title), module: str(it.module), audience: str(it.audience), summary: str(it.summary), body: str(it.body),
-      shots: (it.images || []).length,
+      category: it.category, title: str(it.title), module: str(it.module), audience: str(it.audience), summary: str(it.summary),
+      sections: itemSections(it).map((s) => ({ title: str(s.title), body: str(s.body), shots: (s.images || []).length })),
     })),
   };
 }
@@ -157,11 +168,17 @@ export function readDraft(raw) {
       title: str(f.title), summary: str(f.summary), tags: str(f.tags), overview: str(f.overview),
     },
     links: (Array.isArray(d.links) ? d.links : []).slice(0, 50).map((l) => ({ label: str(l?.label), url: str(l?.url), kind: KINDS.includes(l?.kind) ? l.kind : 'other' })),
-    items: (Array.isArray(d.items) ? d.items : []).slice(0, 200).map((it) => ({
-      category: CATEGORIES.some((c) => c.id === it?.category) ? it.category : '',
-      title: str(it?.title), module: str(it?.module), audience: str(it?.audience), summary: str(it?.summary), body: str(it?.body),
-      shots: Number.isInteger(it?.shots) && it.shots > 0 ? Math.min(it.shots, 1000) : 0,
-    })),
+    items: (Array.isArray(d.items) ? d.items : []).slice(0, 200).map((it) => {
+      const count = (v) => (Number.isInteger(v) && v > 0 ? Math.min(v, 1000) : 0);
+      // a draft saved before sections existed has one `body` and one `shots` count per feature: that is a single section
+      const raw = Array.isArray(it?.sections) ? it.sections : [{ title: '', body: it?.body, shots: it?.shots }];
+      const sections = raw.slice(0, 50).map((s) => ({ title: str(s?.title), body: str(s?.body), shots: count(s?.shots) }));
+      return {
+        category: CATEGORIES.some((c) => c.id === it?.category) ? it.category : '',
+        title: str(it?.title), module: str(it?.module), audience: str(it?.audience), summary: str(it?.summary),
+        sections, shots: sections.reduce((n, s) => n + s.shots, 0),
+      };
+    }),
   };
 }
 
@@ -169,7 +186,7 @@ export function readDraft(raw) {
 export const isBlankDraft = (d) => !(
   d.form.title.trim() || d.form.summary.trim() || d.form.overview.trim()
   || d.links.some((l) => l.label.trim() || l.url.trim())
-  || d.items.some((it) => it.title.trim() || it.summary.trim() || it.body.trim())
+  || d.items.some((it) => it.title.trim() || it.summary.trim() || it.sections.some((s) => s.title.trim() || s.body.trim()))
 );
 
 export function timeAgo(then, now = Date.now()) {
