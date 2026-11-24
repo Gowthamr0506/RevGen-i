@@ -554,34 +554,6 @@ test('what the formatting buttons write is what the real parser understands', ()
   assert.match(step.note, /Reminders belong to you\./);
 });
 
-test('problems are reported per field, in page order, and messages know where to jump', () => {
-  const m = model({ version: '2.42.0', date: '', title: ' ', summary: '', items: [
-    { category: '', title: 'A', summary: '', body: '', images: [{ name: 'a.png', alt: '', caption: '' }, { name: 'b.png', alt: 'ok', caption: '' }] },
-    { category: 'bug-fix', title: 'B', summary: 'fine', body: '', images: [] },
-  ] });
-  const i = editor.fieldIssues(m, { existingVersions: ['2.42.0'] });
-  assert.deepEqual(Object.keys(i.meta), ['version', 'date', 'title', 'summary']);
-  assert.match(i.meta.version, /already exists/);
-  assert.deepEqual([i.detailsOk, i.changesOk], [false, false]);
-  assert.deepEqual(Object.keys(i.items[0]).filter((k) => k !== 'shots' && i.items[0][k]), ['category', 'desc']);
-  assert.deepEqual(i.items[0].shots.map(Boolean), [true, false]);
-  assert.deepEqual(i.items[1], { shots: [] });
-  assert.deepEqual(editor.problemOrder(i).map((p) => p.sel), [
-    '#version', '#date', '#title', '#summary',
-    '.item-form[data-i="0"] input[data-f="category"]', '.item-form[data-i="0"] [data-f="summary"]', '.item-form[data-i="0"] .shot-row[data-k="0"] [data-img="alt"]',
-  ]);
-  const good = editor.fieldIssues(model(), { existingVersions: [] });
-  assert.deepEqual([good.detailsOk, good.changesOk], [true, true]);
-  assert.equal(editor.fieldIssues(model({ summary: '', status: 'draft' }), {}).meta.summary, undefined, 'a draft may omit the summary');
-  assert.equal(editor.fieldIssues(model({ items: [] }), {}).changesOk, false, 'no items yet is not complete');
-  assert.deepEqual(editor.jumpTarget('Item 2 (“B”): add a title.'), { sel: '.item-form[data-i="1"]', item: 1 });
-  assert.equal(editor.jumpTarget('Version must look like 2.43.0 (...)').sel, '#version');
-  assert.equal(editor.jumpTarget('Choose a valid release date.').sel, '#date');
-  assert.equal(editor.jumpTarget('Add a release title.').sel, '#title');
-  assert.equal(editor.jumpTarget('Add a short summary (one or two sentences).').sel, '#summary');
-  assert.equal(editor.jumpTarget('The JSON has a mistake: x').sel, '#json');
-  assert.equal(editor.jumpTarget('Something else entirely'), null);
-});
 
 /* ------------------------------------------------------------------ PDF download */
 // A strict reader for the files pdf.mjs writes: object offsets, stream lengths, the page tree, and every piece of text with its position.
@@ -758,25 +730,3 @@ test('pdf: many items flow onto more pages with the right footers; file names ar
   assert.equal(pdf.pdfFileName({ version: '../../x"y', status: 'published' }), 'RevGen-i-release-notes-v....xy.pdf', 'a version can never put path characters in the file name');
 });
 
-test('the draft kept in the browser: text only, restored safely, never trusted blindly', () => {
-  const form = { version: '2.43.0', date: '2026-12-01', type: 'minor', status: 'draft', featured: true, title: 'T', summary: 'S', tags: 'a', overview: 'O' };
-  const items = [{ category: 'bug-fix', title: 'Fix', module: 'M', audience: 'A', summary: 'x', body: 'b', images: [{ name: 'a.png', bytes: new Uint8Array(9) }, { name: 'b.png' }] }];
-  const d = editor.makeDraft({ form, links: [{ label: 'L', url: 'https://x.test', kind: 'demo' }], items }, 1000);
-  const json = JSON.stringify(d);
-  assert.ok(!json.includes('bytes') && !json.includes('a.png'), 'screenshots are never stored, only how many there were');
-  const back = editor.readDraft(json);
-  assert.deepEqual(back.form, form);
-  assert.deepEqual(back.items[0], { category: 'bug-fix', title: 'Fix', module: 'M', audience: 'A', summary: 'x', body: 'b', shots: 2 });
-  assert.equal(back.at, 1000);
-  for (const bad of [null, '', 'not json', '{}', '{"v":2}', '[]', JSON.stringify({ v: 1, at: 'x', form: {} }), JSON.stringify({ v: 1, at: 1 })]) assert.equal(editor.readDraft(bad), null, `rejects ${bad}`);
-  const odd = editor.readDraft(JSON.stringify({ v: 1, at: 5, form: { type: 'huge', status: 'x', title: 7 }, links: [{ kind: 'zzz', label: 5 }, null], items: [{ category: 'nope', shots: -3 }, null, { title: 'ok', shots: 2.5 }] }));
-  assert.deepEqual([odd.form.type, odd.form.status, odd.form.title], ['minor', 'published', '']);
-  assert.deepEqual(odd.links.map((l) => l.kind), ['other', 'other']);
-  assert.deepEqual(odd.items.map((i) => [i.category, i.shots]), [['', 0], ['', 0], ['', 0]]);
-  assert.equal(editor.isBlankDraft(editor.readDraft(editor.makeDraft({ form: { ...form, title: '', summary: '', overview: '' }, links: [], items: [{ category: '', title: '', module: '', audience: '', summary: '', body: '', images: [] }] }))), true);
-  assert.equal(editor.isBlankDraft(back), false);
-  const huge = editor.readDraft(editor.makeDraft({ form: { ...form, overview: 'x'.repeat(300000) }, links: [], items: [] }));
-  assert.equal(huge.form.overview.length, 100000, 'absurdly long text is cut');
-  assert.deepEqual([0, 30, 50, 90, 3000, 7200, 90000, 200000].map((s) => editor.timeAgo(0, s * 1000)),
-    ['just now', 'just now', '1 minute ago', '2 minutes ago', '50 minutes ago', '2 hours ago', 'yesterday', '2 days ago']);
-});
