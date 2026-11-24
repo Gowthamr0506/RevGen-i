@@ -10,7 +10,7 @@ import { itemId } from '../../assets/js/render-shared.mjs';
 
 export const SECTION_IDS = ['overview', 'new-features', 'enhancements-improvements', 'bug-fixes'];
 const AUTHORED = ['version', 'date', 'type', 'status', 'featured', 'sample', 'page', 'title', 'summary', 'tags', 'derived'];
-const BLOCK_TYPES = ['p', 'heading', 'list', 'image', 'gallery', 'steps', 'callout'];
+const BLOCK_TYPES = ['p', 'heading', 'list', 'image', 'gallery', 'steps', 'callout', 'section'];
 const LINK_KINDS = ['video', 'demo', 'docs', 'other'];
 const MAX_IMAGE_BYTES = 1024 * 1024;
 
@@ -31,14 +31,16 @@ export const releaseDir = (version) => `releases/v${version}`;
 /** Every image referenced by a content file, with a human-readable location. */
 export function* walkImages(content) {
   if (content?.cover) yield { img: content.cover, where: 'cover' };
-  for (const [i, item] of (content?.items ?? []).entries()) {
-    for (const [b, block] of (item.body ?? []).entries()) {
-      const at = `items[${i}].body[${b}]`;
-      if (block.type === 'image') yield { img: block, where: at };
-      if (block.type === 'gallery') for (const [g, img] of (block.images ?? []).entries()) yield { img, where: `${at}.images[${g}]` };
-      if (block.type === 'steps') for (const [s, step] of (block.items ?? []).entries())
-        for (const [g, img] of (step.images ?? []).entries()) yield { img, where: `${at}.items[${s}].images[${g}]` };
-    }
+  for (const [i, item] of (content?.items ?? []).entries()) yield* walkBlocks(item.body ?? [], `items[${i}].body`);
+}
+function* walkBlocks(blocks, base) {
+  for (const [b, block] of blocks.entries()) {
+    const at = `${base}[${b}]`;
+    if (block.type === 'image') yield { img: block, where: at };
+    if (block.type === 'gallery') for (const [g, img] of (block.images ?? []).entries()) yield { img, where: `${at}.images[${g}]` };
+    if (block.type === 'steps') for (const [s, step] of (block.items ?? []).entries())
+      for (const [g, img] of (step.images ?? []).entries()) yield { img, where: `${at}.items[${s}].images[${g}]` };
+    if (block.type === 'section') yield* walkBlocks(block.body ?? [], `${at}.body`);
   }
 }
 
@@ -203,9 +205,9 @@ function validateContent(project, rec, content) {
     if (!isText(item.summary) && !(Array.isArray(item.body) && item.body.length)) err(`${at} ("${item.title}"): add a "summary" or a "body"; an item with no description is not useful to readers.`);
     (item.links ?? []).forEach((l, k) => checkLink(l, `${at}.links[${k}]`));
 
-    (Array.isArray(item.body) ? item.body : []).forEach((block, b) => {
-      const where = `${at}.body[${b}]`;
+    const checkBlock = (block, where, nested) => {
       if (!isObj(block) || !BLOCK_TYPES.includes(block.type)) return err(`${where}: "type" must be one of ${BLOCK_TYPES.join(', ')}.`);
+      if (nested && block.type === 'section') return err(`${where}: a section cannot contain another section.`);
       switch (block.type) {
         case 'p': case 'heading':
           if (!isText(block.text)) err(`${where}: "text" is required.`); break;
@@ -232,8 +234,14 @@ function validateContent(project, rec, content) {
             (s.images ?? []).forEach((img, g) => checkImage(img, `${sw}.images[${g}]`));
           });
           break;
+        case 'section': // a numbered part of a feature: its own text and screenshots (blocks), one level deep
+          if (block.title !== undefined && typeof block.title !== 'string') err(`${where}: "title" must be a string.`);
+          if (!(Array.isArray(block.body) && block.body.length)) { err(`${where}: a section needs a non-empty "body" of blocks.`); break; }
+          block.body.forEach((inner, k) => checkBlock(inner, `${where}.body[${k}]`, true));
+          break;
       }
-    });
+    };
+    (Array.isArray(item.body) ? item.body : []).forEach((block, b) => checkBlock(block, `${at}.body[${b}]`, false));
   });
 
   // Images in the release folder that no content references.
