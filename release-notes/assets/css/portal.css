@@ -198,6 +198,12 @@ h3.d{font-size:clamp(20px,1.9vw,24px);line-height:1.15;letter-spacing:-.03em}
 .card-go{display:inline-flex;align-items:center;gap:6px;font:500 14px/1.4 var(--f-body);color:var(--link)}
 .card:hover .card-go .arr{transform:translateX(3px)}
 .card-go .arr{transition:transform .25s var(--ease)}
+.card-foot{display:flex;align-items:center;justify-content:space-between;gap:12px}
+/* "Download PDF" on a card or row: sits above the stretched card link so it can be clicked on its own */
+.pdf-mini{position:relative;z-index:2;display:inline-flex;align-items:center;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg);font:500 12px/1 var(--f-body);letter-spacing:-.01em;color:var(--ink-2);cursor:pointer;white-space:nowrap;transition:border-color .2s,background .2s}
+.pdf-mini:hover{border-color:var(--ink-2);background:var(--wash);color:var(--ink)}
+.pdf-mini:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.btn[aria-busy=true],.pdf-mini[aria-busy=true]{opacity:.6;cursor:progress;pointer-events:none}
 .more{display:flex;justify-content:center;margin-top:28px}
 .empty,.load-error{border:1px dashed var(--line);border-radius:var(--r-md);padding:40px 24px;text-align:center;color:var(--ink-3)}
 .empty p+p{margin:6px 0 16px}
@@ -363,7 +369,7 @@ html.js .rv.in{opacity:1;transform:none}
   .hero-in>*{opacity:1}
 }
 @media print{
-  .site-header,.site-footer,.toc,.pager,.rel-actions,.skip,.shot-zoom{display:none!important}
+  .site-header,.site-footer,.toc,.pager,.rel-actions,.skip,.shot-zoom,.pdf-mini{display:none!important}
   body{font-size:12pt}.rel-body{display:block}.item{break-inside:avoid}.shot-link{border:0}
   a{color:inherit;text-decoration:none}
 }
