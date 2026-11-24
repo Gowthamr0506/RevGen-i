@@ -166,7 +166,8 @@ export function stage(project, files, outDir) {
   }
   copyTree(path.join(root, 'assets'), path.join(out, 'assets'));
   if (fs.existsSync(path.join(root, 'admin'))) copyTree(path.join(root, 'admin'), path.join(out, 'admin')); // the manual release composer
-  for (const r of published) copyTree(path.join(root, r.dir), path.join(out, r.dir), (e) => e.isFile() && e.name === 'content.json');
+  // A published release's content.json goes with it: the page's "Download PDF" reads it (it is the same content the page shows).
+  for (const r of published) copyTree(path.join(root, r.dir), path.join(out, r.dir));
 
   const index = JSON.parse(files.get('releases.json'));
   index.releases = index.releases.filter((r) => r.status === 'published');
@@ -178,9 +179,15 @@ export function stage(project, files, outDir) {
     fs.writeFileSync(path.join(out, 'robots.txt'), renderRobots(site));
   }
 
-  // Belt and braces: prove that no draft or source file leaked into the output.
-  const leaks = [];
-  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.name === 'content.json') leaks.push(toPosix(path.relative(out, p))); } };
+  // Belt and braces: prove that no draft or source file leaked into the output. Only a published release's own content.json may be there.
+  const leaks = [], publishedDirs = new Set(published.map((r) => r.dir));
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name === 'content.json') { const rel = toPosix(path.relative(out, p)); if (!publishedDirs.has(path.posix.dirname(rel))) leaks.push(rel); }
+    }
+  };
   walk(out);
   for (const r of project.releases) if (r.entry.status !== 'published' && fs.existsSync(path.join(out, r.dir))) leaks.push(r.dir);
   if (index.releases.some((r) => r.status !== 'published')) leaks.push('releases.json (draft entry)');
