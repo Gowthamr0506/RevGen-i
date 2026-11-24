@@ -29,11 +29,32 @@ What Claude runs (you can run these yourself; Node 20 or newer):
 | `node tools/rn.mjs validate [--strict]` | Read-only check. Also reports generated files that are out of date. |
 | `node tools/rn.mjs publish <version>` | Draft to published (validates first). |
 | `node tools/rn.mjs list` | One line per release (flags drafts, featured, samples). |
-| `node tools/rn.mjs stage [--out dir]` | Builds exactly what GitHub Pages will serve (no drafts, no source files). |
+| `node tools/rn.mjs stage [--out dir]` | Builds exactly what GitHub Pages will serve (no drafts, no tooling or templates; a published release's `content.json` is included because the PDF download reads it). |
 | `node tools/rn.mjs serve [--port 5211]` | Local preview at http://localhost:5211/ (add `?drafts=1` to see drafts). |
 | `node --test tools/tests/rn.test.mjs` | The tool's own tests. |
 
 Open the pages through `serve`, not by double-clicking `index.html`: browsers block a page from reading `releases.json` from disk. (Individual release pages are static and read fine from disk; the live site is unaffected.)
+
+## Downloading a release as a PDF
+
+Every published release can be downloaded as a PDF, from four places:
+
+- the **release page** (a *Download PDF* button next to *Copy link*),
+- the **landing page** (a *Download PDF* button in the latest-release spotlight, and a small one on each release card),
+- the **archive** (a small *Download PDF* button on each row),
+- the **composer** (`/admin/`): in the *Preview* window, and on each release in *Manage releases* (drafts too).
+
+The file is made **in the reader's browser**, when they ask for it. The site loads no PDF code until someone clicks (`assets/js/pdf-browser.mjs` is fetched on demand), and nothing is sent anywhere: the page reads the release's `content.json` and screenshots from the site itself. Because of that, `stage` ships each **published** release's `content.json`; a draft's is never served.
+
+What the PDF contains: the same content as the page (title, version, date, type, overview, then New Features / Enhancements & Improvements / Bug Fixes with every item, step, list, note box and numbered screenshot with its caption), the official logo, clickable links, page numbers and the support contact. It is typeset for A4 paper (a document, not a copy of the web page), uses the standard Helvetica and Courier fonts, and a screenshot that almost fits the bottom of a page is shrunk slightly to finish the page. A 13-screenshot release such as v2.42.0 is about 11 pages and 1.5 MB and takes a few seconds.
+
+Good to know:
+- A release with a hand-written page (`"page": "custom"`) has no content to draw, so it has no PDF button. Open its page and use the browser's *Print, then Save as PDF*.
+- The PDF fonts cover English and other Western European text. A character outside that set (an emoji, for example) shows as `?`, and an arrow shows as `->`.
+- The PDF is a printable copy, not a tagged accessible document; the web page remains the accessible version.
+- `Download PDF` needs the site to be served over `http(s)`: opened straight from disk the buttons do not appear.
+
+The writer is `assets/js/pdf.mjs` (pure, no libraries, tested in `tools/tests/composer.test.mjs`, which reads the files it produces back like a PDF reader would: object offsets, stream lengths, page tree, and that every line of text sits inside the margins).
 
 ## Add a release yourself: the composer page
 
@@ -78,7 +99,7 @@ releases/vX.Y.Z/
   images/                 screenshots for this release
 admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, editor.mjs, preview.mjs, admin.css)
 templates/                release.html + shared head/header/footer partials (one copy of each)
-assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts; js/render-shared.mjs = the release-page renderer shared by the build and the composer's preview
+assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts; js/render-shared.mjs = the release-page renderer shared by the build and the composer's preview; js/pdf.mjs + js/pdf-browser.mjs = the PDF download
 tools/                    rn.mjs CLI + tests (Node built-ins only)
 ```
 
@@ -123,7 +144,7 @@ The workflow in `.github/workflows/release-notes.yml` validates and deploys. **G
 4. Push (or run the workflow from the **Actions** tab: *Release notes portal > Run workflow*). The first deploy may ask for approval of the `github-pages` environment.
 5. Your site address appears in the workflow run and under Settings > Pages. For a project site it looks like `https://<owner>.github.io/<repo>/`.
 
-What the workflow does: it runs the tool tests, runs `build` (fails on missing images, broken links, invalid metadata, duplicate versions, wrong capitalisation), runs `stage` (copies only public files; **draft releases and source files are excluded**), then deploys. On pull requests it runs the same checks without deploying, so a broken release cannot reach the site.
+What the workflow does: it runs the tool tests, runs `build` (fails on missing images, broken links, invalid metadata, duplicate versions, wrong capitalisation), runs `stage` (copies only public files; **draft releases, tooling and templates are excluded**; a published release's `content.json` is copied because the PDF download reads it), then deploys. On pull requests it runs the same checks without deploying, so a broken release cannot reach the site.
 
 Every push to `main` that touches `release-notes/` updates the site automatically. To use another branch, change `branches: [main]` in the workflow. The site root is the portal itself; release pages are at `/releases/vX.Y.Z/` and are safe to share. Optional: set `site.url` in `releases.json` (deployed address, trailing slash) to get canonical links and a sitemap.
 
