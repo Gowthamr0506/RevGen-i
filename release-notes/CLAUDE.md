@@ -78,6 +78,7 @@ Blocks (`type`):
 - `{"type":"gallery","images":[{src,alt,caption}, ...]}` side-by-side screenshots
 - `{"type":"steps","items":[{"title":"...","audience":"Leads","path":["Home","System Settings"],"text":"... or [paragraphs]","note":"...","images":[{src,alt,caption}]}]}` numbered how-to steps
 - `{"type":"callout","tone":"note|important","text":"..."}`
+- `{"type":"section","title":"optional","body":[ ...blocks ]}` a **numbered part of a feature** ("Section 1", "Section 2", ...), each with its own text and screenshots. Use it when one feature has several parts that each need an explanation and screenshots (the owner's usual shape: feature 1 -> section 1, section 2 ...; feature 2 -> section 1, section 2 ...). `body` holds ordinary blocks (`p`, `heading`, `list`, `image`, `gallery`, `steps`, `callout`) and must not be empty; sections cannot be nested. Numbering restarts in every feature, the section title is optional, and a section shows in the page's "On this page" list. A feature with a single part needs no section: put its blocks straight in `body`. Features of the same kind are labelled "New feature 1", "New feature 2" automatically when a release has several (a lone one stays "Bug fix"). Anchors: `<item-id>-section-N`.
 
 Inline formatting inside any text: `**bold**`, `` `code` ``, `[label](https://url)`. HTML is escaped, never rendered.
 
