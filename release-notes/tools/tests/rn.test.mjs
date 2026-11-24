@@ -144,7 +144,7 @@ test('stage never publishes drafts or source files', () => {
   assert.ok(fs.existsSync(path.join(out, '.nojekyll')));
   for (const f of ['index.html', 'admin.mjs', 'core.mjs', 'admin.css']) assert.ok(fs.existsSync(path.join(out, 'admin', f)), `admin/${f} must be staged`);
   assert.ok(!fs.existsSync(path.join(out, 'releases/v1.1.0')), 'draft folder must not be staged');
-  assert.ok(!fs.existsSync(path.join(out, 'releases/v1.0.0/content.json')), 'source content must not be staged');
+  // The PDF download on the release pages reads a published release's content.json, so that one is served; a draft's never is.
   assert.ok(!fs.existsSync(path.join(out, 'tools')) && !fs.existsSync(path.join(out, 'templates')));
   const staged = fs.readFileSync(path.join(out, 'releases.json'), 'utf8');
   assert.ok(!staged.includes('Secret upcoming feature') && !staged.includes('"1.1.0"'), 'draft must not appear in the staged releases.json');
