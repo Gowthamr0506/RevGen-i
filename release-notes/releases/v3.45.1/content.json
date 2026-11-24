@@ -1,0 +1,73 @@
+{
+  "overview": [
+    "Whether you're coding, posting, reviewing, or resolving, this release is packed with meaningful improvements that empower every user to work more efficiently — and bill with greater confidence."
+  ],
+  "items": [
+    {
+      "category": "new-feature",
+      "title": "Coding Scrubber",
+      "module": "Coding",
+      "audience": [
+        "All"
+      ],
+      "summary": "A new smart scrubber engine validates coding accuracy in real time using CMS and payer rules. Get flagged errors and suggestions before claims go out.\n\n•\tBuilt-in checks: PTP, MUE, CPT substitution, and ICD compatibility\n•\tReal-time feedback during claim save or review\n•\tAuto-correct or override with full visibility in logs",
+      "body": [
+        {
+          "type": "image",
+          "src": "images/screenshot.webp",
+          "alt": "fig1"
+        }
+      ]
+    },
+    {
+      "category": "new-feature",
+      "title": "MMS Integration",
+      "module": "AR",
+      "audience": [
+        "All"
+      ],
+      "summary": "CommitMD now supports MMS as a new integration channel for transmitting and receiving healthcare data, including claims, remits, and eligibility responses. It offers a robust alternative to Inbox, using standardized messaging protocols for secure, real-time communication with clearinghouses and payers."
+    },
+    {
+      "category": "bug-fix",
+      "title": "Bug number2",
+      "module": "Bug Fixes",
+      "summary": "Blocked reuse of existing SSNs for patients or subscribers in Claim Bulk Upload Type 2.",
+      "body": [
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            "Blocked reuse of existing SSNs for patients or subscribers in Claim Bulk Upload Type 2.",
+            "Fixed an issue where multiple CPTs under the same serial weren’t displaying correctly in the encounter screen.",
+            "Resolved missing or misaligned CPT-level details in the Transaction Detailed BIRT Report.",
+            "Corrected logic that incorrectly generated a day record two days ahead during billing.",
+            "Fixed an issue where notes entered during quick payment posting were not retained.",
+            "Standardized email templates and fixed delivery issues for Contact Us and Request Demo forms.",
+            "System now correctly prompts for mandatory notes when adding a Debit Adjustment.",
+            "Removed invalid Void option for Unapply Refund transactions to prevent errors.",
+            "Resolved a UI overlap issue caused by expanded pagination settings.",
+            "Changed label from “System Notes” to “User Notes” for manually added notes.",
+            "Fixed a UI bug where the reset overlay didn’t fully mask the login form.",
+            "Corrected duplicate entries and missing unapplied lines during 835 parsing and ERA posting.",
+            "Enforced a 15-minute session timeout (10 min idle + 5 min warning) for improved security.",
+            "Resolved duplicate or misclassified adjustments for insurance, patient, and unapplied amounts.",
+            "Fixed missing CPT Status and ICN Number fields in the Denial Report output.",
+            "Only denied CPTs now follow the Bill to Patient path; approved CPTs continue standard flow.",
+            "Enhanced CPT list to show both paid and unpaid CPTs during 835 parsing.",
+            "Ensured charge values now reflect correctly in reports, even for unfocused claims.",
+            "Restricted 'SELF PAY' carriers to only use the 'SELF PAY' plan type.",
+            "Triggered an exception if a DOS in the bulk upload is missing carrier mapping.",
+            "Fixed gaps in 277 parsing to ensure parsing notes are always generated.",
+            "Resolved issue where payer names were not shown in the Payer Notes section.",
+            "Fixed rejection flow to ensure notes are created for all rejected visits.",
+            "Fixed issue were assigning a Responsible Party incorrectly updated account numbers.",
+            "Corrected calculation bugs that led to incorrect total balances in Inbox view.",
+            "Unified email layouts across environments (UAT, QA, Production) for consistent delivery.",
+            "Fixed a mismatch where the detailed view didn’t show accurate paid amounts."
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -90,6 +90,15 @@
       "featured": false,
       "title": "Sample test2",
       "summary": "Sample test2"
+    },
+    {
+      "version": "3.45.1",
+      "date": "2026-11-24",
+      "type": "patch",
+      "status": "published",
+      "featured": false,
+      "title": "Executive Summary – CommitMD v2.38.0",
+      "summary": "Version 2.38.0 delivers meaningful advancements in CommitMD’s mission to streamline billing workflows, reduce denials, and improve operational control."
     }
   ]
 }
