@@ -54,6 +54,54 @@ test('new + build produces a page, a derived index entry, and is idempotent', ()
   assert.equal(rn(root, 'validate').code, 0);
 });
 
+test('a feature can be broken into numbered sections, each with its own text and screenshots', () => {
+  const root = makePortal();
+  addRelease(root, '1.0.0', { items: [
+    ITEM({ title: 'First feature', body: [
+      { type: 'section', title: 'Turn it on', body: [{ type: 'p', text: 'Open **Settings**.' }, { type: 'image', src: 'images/a.png', alt: 'Settings', caption: 'The settings screen' }] },
+      { type: 'section', body: [{ type: 'steps', items: [{ title: 'Pick a day', images: [{ src: 'images/b.png', alt: 'Calendar' }] }] }, { type: 'callout', text: 'Mind the time zone.' }] },
+    ] }),
+    ITEM({ title: 'Second feature', body: [{ type: 'section', title: 'Only part', body: [{ type: 'p', text: 'Text.' }] }, { type: 'section', title: 'Another', body: [{ type: 'list', items: ['a', 'b'] }] }] }),
+    ITEM({ category: 'bug-fix', title: 'A fix', summary: 'Fixed.' }),
+  ] });
+  fs.writeFileSync(path.join(root, 'releases/v1.0.0/images/a.png'), png(40, 30));
+  fs.writeFileSync(path.join(root, 'releases/v1.0.0/images/b.png'), png(40, 30));
+  const b = rn(root, 'build');
+  assert.equal(b.code, 0, b.out);
+  const page = fs.readFileSync(path.join(root, 'releases/v1.0.0/index.html'), 'utf8');
+  assert.match(page, /<section class="sub" id="first-feature-section-1" aria-labelledby="first-feature-section-1-h"><h4 class="sub-h" id="first-feature-section-1-h"><span class="sub-n">Section 1<\/span><span class="sub-t">Turn it on<\/span><\/h4>/);
+  assert.match(page, /<span class="sub-n">Section 2<\/span><\/h4>/, 'a section without a title still gets its number');
+  assert.match(page, /id="first-feature-section-2-step-1"/, 'steps inside a section get ids of their own');
+  assert.match(page, /id="second-feature-section-1"[\s\S]*id="second-feature-section-2"/, 'numbering restarts for the next feature');
+  assert.match(page, /<img src="images\/a\.png" alt="Settings" width="40" height="30"/, 'a screenshot inside a section is drawn with its size');
+  assert.match(page, /<li><a href="#first-feature">First feature<\/a><ol><li><a href="#first-feature-section-1">Section 1: Turn it on<\/a><\/li><li><a href="#first-feature-section-2">Section 2<\/a><\/li><\/ol><\/li>/, 'the contents list shows the sections');
+  assert.match(page, /class="chip cat-new-feature">New feature 1<\/span>/);
+  assert.match(page, /class="chip cat-new-feature">New feature 2<\/span>/);
+  assert.match(page, /class="chip cat-bug-fix">Bug fix<\/span>/, 'a lone feature of its kind is not numbered');
+  const ids = [...page.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(ids).size, ids.length, 'every id on the page is unique');
+  const derived = JSON.parse(fs.readFileSync(path.join(root, 'releases.json'), 'utf8')).releases[0].derived;
+  assert.equal(derived.cover.src, 'releases/v1.0.0/images/a.png', 'the cover is found inside a section');
+  assert.equal(rn(root, 'validate').code, 0);
+});
+
+test('sections are checked: images inside them must exist and be described, and they cannot be nested or empty', () => {
+  const root = makePortal();
+  addRelease(root, '1.0.0', { items: [ITEM({ body: [
+    { type: 'section', title: 'One', body: [{ type: 'image', src: 'images/missing.png', alt: 'x' }, { type: 'image', src: 'images/also-missing.png' }] },
+    { type: 'section', title: 'Two', body: [{ type: 'section', title: 'Inside', body: [{ type: 'p', text: 'x' }] }] },
+    { type: 'section', title: 'Three', body: [] },
+    { type: 'section', title: 5, body: [{ type: 'p', text: 'x' }] },
+  ] })] });
+  const e = errorsOf(root).join('\n');
+  assert.match(e, /items\[0\]\.body\[0\]\.body\[0\]: image not found: releases\/v1\.0\.0\/images\/missing\.png/);
+  assert.match(e, /items\[0\]\.body\[0\]\.body\[1\]: "alt" text is required|items\[0\]\.body\[0\]\.body\[1\]: image not found/);
+  assert.match(e, /items\[0\]\.body\[1\]\.body\[0\]: a section cannot contain another section/);
+  assert.match(e, /items\[0\]\.body\[2\]: a section needs a non-empty "body"/);
+  assert.match(e, /items\[0\]\.body\[3\]: "title" must be a string/);
+  assert.equal(rn(root, 'build').code, 1, 'a broken section stops the build');
+});
+
 test('adding a release leaves every other release byte-identical', () => {
   const root = makePortal();
   addRelease(root, '1.0.0');
