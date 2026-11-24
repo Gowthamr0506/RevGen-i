@@ -4,7 +4,7 @@
 // A4 pages, the standard Helvetica and Courier fonts (nothing to embed), screenshots as JPEG, clickable links, page numbers.
 // The structure follows the website page (overview, then New Features / Enhancements & Improvements / Bug Fixes), using the
 // same section and category definitions from assets/js/render-shared.mjs.
-import { CATEGORIES, SECTIONS, TYPES, formatDate, isSafeUrl } from './render-shared.mjs';
+import { CATEGORIES, SECTIONS, TYPES, categoryLabel, formatDate, isSafeUrl } from './render-shared.mjs';
 
 const PW = 595.28, PH = 841.89, ML = 54, MR = 54, MT = 54, MB = 64;
 const CW = PW - ML - MR;
@@ -154,6 +154,7 @@ const CHIP = {
   'type-major': { fill: NAVY, stroke: NAVY, color: WHITE },
   'type-minor': { fill: WHITE, stroke: SOFT, color: INK },
   'type-patch': { fill: WHITE, stroke: SOFT, color: SOFT },
+  section: { fill: BLUE_WASH, stroke: BLUE_WASH, color: LINK },
   featured: { fill: WHITE, stroke: BLUE, color: LINK },
   draft: { fill: AMBER_BG, stroke: AMBER, color: AMBER },
   sample: { fill: WASH, stroke: SOFT, color: SOFT },
@@ -164,6 +165,7 @@ class Layout {
   constructor({ images, baseUrl }) {
     this.images = images; this.baseUrl = baseUrl;
     this.pages = []; this.y = MT; this.fig = 0;
+    this.totals = {}; this.nums = new Map();
     this.imgList = []; // distinct images, in the order first used
     this.newPage();
   }
@@ -340,6 +342,18 @@ class Layout {
       this.y += 6;
     });
   }
+  /** A numbered part of a feature: "Section 2" and its title, then its own text and screenshots. */
+  section(b, n) {
+    if (n > 1) { this.ensure(80); this.hRule(this.y + 2, LINE); this.y += 18; } else { this.y += 8; this.ensure(70); }
+    const label = `Section ${n}`, cw = textWidth(label, 'b', 8) + 12, top = this.y;
+    this.chip(ML, top, label, CHIP.section);
+    if (b.title) {
+      this.text(inlineRuns(b.title, 'b', this.baseUrl), { x: ML + cw + 10, w: CW - cw - 10, size: 12.5, lead: 17, color: INK, keep: 2 });
+      this.y = Math.max(this.y, top + 15) + 6;
+    } else this.y += 21;
+    this.y += 4;
+    for (const inner of b.body ?? []) this.block(inner);
+  }
   block(b) {
     switch (b.type) {
       case 'p': this.text(inlineRuns(b.text, 'r', this.baseUrl), { size: 10.5, lead: 15, color: INK, after: 7 }); break;
@@ -362,13 +376,14 @@ class Layout {
   item(it) {
     const cat = CAT[it.category];
     this.ensure(96);
-    const w = this.chip(ML, this.y, cat.label, CHIP[cat.id]);
+    const w = this.chip(ML, this.y, categoryLabel(it, this.totals, this.nums), CHIP[cat.id]);
     const meta = [it.module, (it.audience ?? []).length ? `For ${it.audience.join(', ')}` : ''].filter(Boolean).join('   ·   ');
     if (meta) this.op(`BT /F1 9 Tf ${rgb(SOFT)} rg ${num(ML + w + 9)} ${num(Y(this.y + 10.6))} Td ${pdfString(meta)} Tj ET`);
     this.y += 23;
     this.text([{ t: it.title, f: 'b' }], { size: 13.5, lead: 18, color: INK, after: 4, keep: 2 });
     if (it.summary) this.text(inlineRuns(it.summary, 'r', this.baseUrl), { size: 10.5, lead: 15, color: SOFT, after: 7 });
-    for (const b of it.body ?? []) this.block(b);
+    let part = 0;
+    for (const b of it.body ?? []) { if (b.type === 'section') this.section(b, ++part); else this.block(b); }
     if (it.links?.length) { this.y += 2; this.linkLines(it.links); }
     this.y += 4;
     this.hRule(this.y);
@@ -391,6 +406,8 @@ export const pdfFileName = (entry) => `RevGen-i-release-notes-v${String(entry.ve
 export function buildReleasePdf({ entry, content, images = {}, logo = null, baseUrl = '', now = new Date() }) {
   const L = new Layout({ images, baseUrl });
   const items = (content.items ?? []).filter((i) => CAT[i.category]);
+  L.totals = {}; L.nums = new Map(); // "New feature 1", "New feature 2": numbered within a kind, when there are several
+  for (const it of items) { L.totals[it.category] = (L.totals[it.category] ?? 0) + 1; L.nums.set(it, L.totals[it.category]); }
   const overview = content.overview === undefined ? [] : Array.isArray(content.overview) ? content.overview : [content.overview];
   const draft = entry.status === 'draft';
 

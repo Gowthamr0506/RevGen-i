@@ -97,6 +97,14 @@ function steps(block, ctx, parentId) {
   return `<ol class="steps">${lis.join('')}</ol>`;
 }
 
+/** A numbered part of a feature (Section 1, Section 2, ...): its own text and screenshots. n = its number within the feature. */
+function section(b, ctx, parentId, n) {
+  const sid = `${parentId}-section-${n}`;
+  const inner = (b.body ?? []).map((x) => block(x, ctx, sid)).join('');
+  return `<section class="sub" id="${sid}" aria-labelledby="${sid}-h"><h4 class="sub-h" id="${sid}-h"><span class="sub-n">Section ${n}</span>` +
+    `${b.title ? `<span class="sub-t">${inline(b.title)}</span>` : ''}</h4><div class="sub-body">${inner}</div></section>`;
+}
+
 function block(b, ctx, parentId) {
   switch (b.type) {
     case 'p': return `<p>${inline(b.text)}</p>`;
@@ -110,14 +118,21 @@ function block(b, ctx, parentId) {
   }
 }
 
+/** "New feature 1", "New feature 2": a feature is numbered within its kind, but only when the release has several of that kind. */
+export function categoryLabel(it, totals, nums) {
+  const cat = CAT[it.category];
+  return totals[it.category] > 1 ? `${cat.label} ${nums.get(it)}` : cat.label;
+}
+
 function item(it, ctx) {
   const id = itemId(it);
   const cat = CAT[it.category];
-  const body = (it.body ?? []).map((b) => block(b, ctx, id)).join('');
+  let sec = 0;
+  const body = (it.body ?? []).map((b) => (b.type === 'section' ? section(b, ctx, id, ++sec) : block(b, ctx, id))).join('');
   const links = it.links?.length ? `<p class="item-links">${it.links.map(linkButton).join('')}</p>` : '';
   const aud = (it.audience ?? []).map((a) => `<span class="chip aud"><span class="sr">For </span>${esc(a)}</span>`).join('');
   return `<article class="item${body || links ? '' : ' item-compact'}" id="${id}">` +
-    `<header class="item-head"><div class="item-tags"><span class="chip cat-${cat.id}">${cat.label}</span>` +
+    `<header class="item-head"><div class="item-tags"><span class="chip cat-${cat.id}">${categoryLabel(it, ctx.totals, ctx.nums)}</span>` +
     (it.module ? `<span class="item-module">${esc(it.module)}</span>` : '') + aud + `</div>` +
     `<h3 class="d"><a class="anchor" href="#${id}">${esc(it.title)}</a></h3></header>` +
     (it.summary ? `<p class="item-summary">${inline(it.summary)}</p>` : '') +
@@ -156,12 +171,19 @@ export function renderReleaseMain({ entry, content, root = '../../', imageInfo =
     ? `<ul class="rel-counts" aria-label="Changes in this release">${counts.map((c) =>
       `<li><a class="count-tile cat-${c.id}" href="#${SECTION_OF[c.id]}"><span class="count-n">${c.n}</span><span class="count-l">${c.n === 1 ? c.label : c.plural}</span></a></li>`).join('')}</ul>` : '';
 
+  // the parts of a feature, listed under it in the contents
+  const tocParts = (i) => {
+    const parts = (i.body ?? []).filter((b) => b.type === 'section');
+    return parts.length ? `<ol>${parts.map((s, k) => `<li><a href="#${itemId(i)}-section-${k + 1}">Section ${k + 1}${s.title ? `: ${esc(plain(s.title))}` : ''}</a></li>`).join('')}</ol>` : '';
+  };
   const toc = `<details class="toc" open><summary>On this page</summary><nav aria-label="On this page"><ol>` +
     (overview.length ? '<li><a href="#overview">Overview</a></li>' : '') +
-    sections.map((s) => `<li><a href="#${s.id}">${s.title}</a><ol>${s.items.map((i) => `<li><a href="#${itemId(i)}">${esc(i.title)}</a></li>`).join('')}</ol></li>`).join('') +
+    sections.map((s) => `<li><a href="#${s.id}">${s.title}</a><ol>${s.items.map((i) => `<li><a href="#${itemId(i)}">${esc(i.title)}</a>${tocParts(i)}</li>`).join('')}</ol></li>`).join('') +
     `</ol></nav></details>`;
 
-  const ctx = { imageInfo, imgSrc };
+  const totals = {}, nums = new Map();
+  for (const it of items) if (CAT[it.category]) { totals[it.category] = (totals[it.category] ?? 0) + 1; nums.set(it, totals[it.category]); }
+  const ctx = { imageInfo, imgSrc, totals, nums };
   return `<main id="main" class="rel" data-version="${entry.version}" data-status="${entry.status}"><div class="wrap">
 <nav class="crumbs" aria-label="Breadcrumb"><a href="${root}">Release notes</a><span aria-hidden="true">&#8250;</span><a href="${root}releases/">All releases</a><span aria-hidden="true">&#8250;</span><span aria-current="page">v${entry.version}</span></nav>
 ${notice}
