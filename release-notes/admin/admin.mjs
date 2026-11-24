@@ -3,6 +3,7 @@
 import * as core from './core.mjs';
 import * as preview from './preview.mjs';
 import * as editor from './editor.mjs';
+import * as pdfBrowser from '../assets/js/pdf-browser.mjs';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -521,7 +522,7 @@ async function watchBuild(sha, entry, cfg) {
 /* ------------------------------------------------------------------ preview */
 // The page is drawn by the same code the website build uses (assets/js/render-shared.mjs) and shown in a sandboxed frame
 // (scripts off, same origin so the stylesheets and blob: screenshots load). Nothing is saved or sent anywhere.
-const pv = { dlg: $('#preview'), frame: $('#pvFrame'), stage: $('#pvStage'), note: $('#pvNote'), foot: $('#pvFoot'), dispose: null, footTimer: 0 };
+const pv = { dlg: $('#preview'), frame: $('#pvFrame'), stage: $('#pvStage'), note: $('#pvNote'), foot: $('#pvFoot'), dispose: null, footTimer: 0, current: null };
 const PV_FOOT = 'Links to other pages are switched off here. The previous / next links and the “Latest release” badge are added by the website once the release is on it.';
 const mimeOf = (name) => MIME[name.slice(name.lastIndexOf('.')).toLowerCase()] || 'application/octet-stream';
 
@@ -582,13 +583,29 @@ async function openPreview({ entry, content, images = {}, lead, dispose }) {
   $('#pvTitle').textContent = `Preview of v${prep.entry.version}`;
   setPvFoot(PV_FOOT);
   pv.dispose = dispose || null;
+  pv.current = { entry: prep.entry, content: prep.content, images }; // what "Download PDF" turns into a file: exactly what is shown
   pv.dlg.showModal();
   pv.frame.srcdoc = html;
 }
 pv.frame.addEventListener('load', wireFrame);
 pv.dlg.addEventListener('close', () => {
   pv.frame.srcdoc = '';
+  pv.current = null;
   if (pv.dispose) { pv.dispose(); pv.dispose = null; }
+});
+
+/** Builds the PDF for a release and hands it to the browser as a download. images = {fileName: blob url}. */
+async function makePdf({ entry, content, images, onProgress }) {
+  const bytes = await pdfBrowser.releasePdfBytes({ entry, content, imageUrls: images, logoUrl: '../assets/images/logo.svg', baseUrl: `${siteBase()}releases/v${entry.version}/`, onProgress });
+  pdfBrowser.saveBytes(bytes, pdfBrowser.pdfFileName(entry));
+}
+$('#pvPdf').addEventListener('click', async (e) => {
+  if (!pv.current) return;
+  const b = e.currentTarget, label = b.textContent;
+  b.disabled = true; b.textContent = 'Preparing…';
+  try { await makePdf({ ...pv.current, onProgress: (t) => setPvFoot(t) }); setPvFoot('The PDF has been downloaded.', true); }
+  catch (err) { setPvFoot(`The PDF could not be created: ${err.message || err}`, true); }
+  b.disabled = false; b.textContent = label;
 });
 pv.dlg.addEventListener('click', (e) => { if (e.target === pv.dlg) pv.dlg.close(); }); // the dark area around the box
 $('#pvClose').addEventListener('click', () => pv.dlg.close());
@@ -639,6 +656,32 @@ async function previewSaved(li) {
   } finally { state.previewing = false; btn.disabled = false; }
 }
 
+/** A saved release (Manage releases) as a PDF download. Reads it from GitHub like Preview does; changes nothing. */
+async function pdfSaved(li) {
+  if (state.managing || state.previewing) return;
+  const v = li.dataset.v, extra = $('.rel-extra', li), btn = $('[data-act=pdf]', li), cfg = getCfg();
+  closeConfirms();
+  extra.hidden = false;
+  extra.innerHTML = '<p class="muted">Loading the saved release…</p>';
+  state.previewing = true; btn.disabled = true;
+  const urls = [], say = (t) => { const p = $('p', extra); if (p) p.textContent = t; };
+  try {
+    const r = await core.loadReleaseForPreview({ ...cfg, version: v, onProgress: say });
+    if (r.custom) {
+      const link = r.entry.status === 'draft' ? '' : ` <a href="${esc(`${siteBase()}releases/v${v}/`)}" target="_blank" rel="noopener noreferrer">Open it on the website</a> and use your browser’s Print, then Save as PDF.`;
+      extra.innerHTML = `<div class="confirm neutral"><p><strong>v${esc(v)} uses a hand-written page.</strong> It is not built from a form, so it cannot be turned into a PDF here.${link}</p>${closeBtn}</div>`;
+      return;
+    }
+    const images = {};
+    for (const im of r.images) { const u = URL.createObjectURL(new Blob([im.bytes], { type: mimeOf(im.name) })); urls.push(u); images[im.name] = u; }
+    const prep = preview.prepare(r.entry, r.content, todayIso());
+    await makePdf({ entry: prep.entry, content: prep.content, images, onProgress: say });
+    extra.innerHTML = `<div class="confirm neutral"><p><strong>The PDF for v${esc(v)} has been downloaded.</strong> Check your browser’s downloads if you do not see it.</p>${closeBtn}</div>`;
+  } catch (e) {
+    extra.innerHTML = `<div class="confirm bad"><p>${esc(e.message || String(e))}</p>${closeBtn}</div>`;
+  } finally { urls.forEach((u) => URL.revokeObjectURL(u)); state.previewing = false; btn.disabled = false; }
+}
+
 /* ------------------------------------------------------------------ manage releases: publish, unpublish, delete */
 const relOrder = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0) || core.compareVersions(b.version, a.version);
 const typedMatches = (typed, version) => typed.trim().replace(/^v/i, '') === version; // "2.43.0" or "v2.43.0"
@@ -670,6 +713,7 @@ function renderManage() {
       <div class="rel-actions">
         ${draft ? '' : `<a class="linkish" href="${esc(`${siteBase()}releases/v${r.version}/`)}" target="_blank" rel="noopener noreferrer">View on website</a>`}
         <button type="button" class="btn btn-outline btn-sm" data-act="preview">Preview</button>
+        <button type="button" class="btn btn-outline btn-sm" data-act="pdf">Download PDF</button>
         <button type="button" class="btn btn-outline btn-sm" data-act="ask-status" data-to="${draft ? 'published' : 'draft'}">${draft ? 'Publish' : 'Unpublish'}</button>
         <button type="button" class="btn btn-outline-danger btn-sm" data-act="ask-delete">Delete…</button>
       </div>
@@ -957,6 +1001,7 @@ $('#relList').addEventListener('click', (e) => {
   const li = b.closest('.rel-row');
   if (b.dataset.act === 'open-connect') focusConnect();
   if (b.dataset.act === 'preview') previewSaved(li);
+  if (b.dataset.act === 'pdf') pdfSaved(li);
   if (b.dataset.act === 'ask-delete') askDelete(li);
   if (b.dataset.act === 'ask-status') askStatus(li, b.dataset.to);
   if (b.dataset.act === 'do-status') doStatus(li, b.dataset.to);
