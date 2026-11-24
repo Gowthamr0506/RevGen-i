@@ -145,6 +145,10 @@ test('stage never publishes drafts or source files', () => {
   for (const f of ['index.html', 'admin.mjs', 'core.mjs', 'admin.css']) assert.ok(fs.existsSync(path.join(out, 'admin', f)), `admin/${f} must be staged`);
   assert.ok(!fs.existsSync(path.join(out, 'releases/v1.1.0')), 'draft folder must not be staged');
   // The PDF download on the release pages reads a published release's content.json, so that one is served; a draft's never is.
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'releases/v1.0.0/content.json'), 'utf8')), JSON.parse(fs.readFileSync(path.join(root, 'releases/v1.0.0/content.json'), 'utf8')), 'a published release ships its content.json');
+  const contentFiles = [...snapshot(out).keys()].filter((k) => k.endsWith('content.json'));
+  assert.deepEqual(contentFiles, ['releases/v1.0.0/content.json'], 'no other content.json is staged');
+  for (const f of ['pdf.mjs', 'pdf-browser.mjs', 'render-shared.mjs']) assert.ok(fs.existsSync(path.join(out, 'assets/js', f)), `assets/js/${f} must be staged (the PDF download loads it)`);
   assert.ok(!fs.existsSync(path.join(out, 'tools')) && !fs.existsSync(path.join(out, 'templates')));
   const staged = fs.readFileSync(path.join(out, 'releases.json'), 'utf8');
   assert.ok(!staged.includes('Secret upcoming feature') && !staged.includes('"1.1.0"'), 'draft must not appear in the staged releases.json');

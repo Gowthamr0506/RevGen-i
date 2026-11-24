@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import * as core from '../../admin/core.mjs';
 import * as preview from '../../admin/preview.mjs';
 import * as editor from '../../admin/editor.mjs';
+import * as pdf from '../../assets/js/pdf.mjs';
 
 const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RN = path.join(REAL, 'tools', 'rn.mjs');
@@ -500,7 +501,7 @@ test('the preview frame stays locked down: no scripts, no popups, and the page C
 });
 
 test('the shared renderer is browser-safe: no imports and no Node APIs', () => {
-  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs', 'admin/editor.mjs']) {
+  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs', 'admin/editor.mjs', 'assets/js/pdf.mjs']) {
     const src = fs.readFileSync(path.join(REAL, f), 'utf8');
     assert.ok(!/node:|\bprocess\b|\bBuffer\b|\brequire\(|\bfs\./.test(src), `${f} must not use Node APIs`);
   }
@@ -580,6 +581,181 @@ test('problems are reported per field, in page order, and messages know where to
   assert.equal(editor.jumpTarget('Add a short summary (one or two sentences).').sel, '#summary');
   assert.equal(editor.jumpTarget('The JSON has a mistake: x').sel, '#json');
   assert.equal(editor.jumpTarget('Something else entirely'), null);
+});
+
+/* ------------------------------------------------------------------ PDF download */
+// A strict reader for the files pdf.mjs writes: object offsets, stream lengths, the page tree, and every piece of text with its position.
+const CP1252_BACK = { 0x80: '€', 0x85: '…', 0x91: '‘', 0x92: '’', 0x93: '“', 0x94: '”', 0x95: '•', 0x96: '–', 0x97: '—', 0x99: '™', 0x9B: '›' };
+function readPdf(bytes) {
+  const s = Buffer.from(bytes).toString('latin1');
+  assert.ok(s.startsWith('%PDF-1.4\n'), 'PDF header');
+  assert.ok(s.endsWith('%%EOF\n'), 'end-of-file marker');
+  const sx = s.lastIndexOf('startxref'), xrefPos = Number(s.slice(sx + 10, s.indexOf('\n', sx + 10)));
+  assert.equal(s.slice(xrefPos, xrefPos + 5), 'xref\n', 'startxref points at the cross-reference table');
+  const size = Number(s.slice(xrefPos).match(/^xref\n0 (\d+)\n/)[1]);
+  const table = s.slice(xrefPos).split('\n').slice(2, 2 + size);
+  assert.equal(table[0], '0000000000 65535 f ', 'the free entry');
+  const objs = {};
+  for (let n = 1; n < size; n += 1) {
+    assert.match(table[n], /^\d{10} 00000 n $/, `xref entry ${n} has the exact format`);
+    const at = Number(table[n].slice(0, 10));
+    assert.equal(s.slice(at, at + `${n} 0 obj\n`.length), `${n} 0 obj\n`, `object ${n} starts where the table says`);
+    const end = s.indexOf('\nendobj\n', at);
+    const body = s.slice(at + `${n} 0 obj\n`.length, end);
+    const st = body.indexOf('stream\n');
+    if (st >= 0) {
+      const len = Number(body.match(/\/Length (\d+)/)[1]);
+      assert.equal(body.slice(st + 7 + len, st + 7 + len + 10), '\nendstream', `object ${n}: the stream length is exact`);
+    }
+    objs[n] = body;
+  }
+  assert.ok(sx > xrefPos, 'trailer after the table');
+  assert.match(s.slice(xrefPos), new RegExp(`trailer\\n<< /Size ${size} /Root 1 0 R /Info 3 0 R >>`));
+  const root = objs[1], pagesNo = Number(root.match(/\/Pages (\d+) 0 R/)[1]);
+  const kids = [...objs[pagesNo].match(/\/Kids \[([^\]]*)\]/)[1].matchAll(/(\d+) 0 R/g)].map((m) => Number(m[1]));
+  assert.equal(Number(objs[pagesNo].match(/\/Count (\d+)/)[1]), kids.length, '/Count matches the page list');
+  const pages = kids.map((k) => {
+    assert.match(objs[k], /^<< \/Type \/Page /);
+    const stream = objs[Number(objs[k].match(/\/Contents (\d+) 0 R/)[1])];
+    const content = stream.slice(stream.indexOf('stream\n') + 7, stream.lastIndexOf('\nendstream'));
+    const segs = [];
+    const re = /\/(F\d) ([\d.]+) Tf [\d. ]+ rg ([\d.-]+) ([\d.-]+) Td \(((?:\\.|[^\\)])*)\) Tj/g;
+    for (const m of content.matchAll(re)) {
+      const text = m[5].replace(/\\(\d{3}|.)/g, (_, c) => (c.length === 3 ? (CP1252_BACK[parseInt(c, 8)] ?? String.fromCharCode(parseInt(c, 8))) : c));
+      segs.push({ font: { F1: 'r', F2: 'b', F3: 'i', F4: 'c' }[m[1]], size: Number(m[2]), x: Number(m[3]), y: Number(m[4]), text });
+    }
+    return { obj: objs[k], content, segs, annots: [...(objs[k].match(/\/Annots \[([^\]]*)\]/)?.[1] ?? '').matchAll(/(\d+) 0 R/g)].map((m) => objs[Number(m[1])]) };
+  });
+  const flat = pages.flatMap((p) => p.segs.map((g) => g.text)).join(' ').replace(/\s+/g, ' ');
+  return { s, size, objs, pages, text: flat, images: Object.values(objs).filter((o) => o.includes('/Subtype /Image')).length };
+}
+const fakeJpeg = (w, h) => ({ jpeg: Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, 0, 16, 0x4A, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xFF, 0xD9]), width: w, height: h });
+const PDF_NOW = new Date('2026-11-24T10:30:00Z');
+const entryOf = (o = {}) => ({ version: '2.43.0', date: '2026-12-01', type: 'minor', status: 'published', featured: false, title: 'Claim reminders', summary: 'Set a reminder on any claim.', ...o });
+
+test('pdf: the real v2.42.0 release becomes a valid, complete, well-laid-out file', () => {
+  const index = JSON.parse(fs.readFileSync(path.join(REAL, 'releases.json'), 'utf8'));
+  const entry = index.releases.find((r) => r.version === '2.42.0');
+  const content = JSON.parse(fs.readFileSync(path.join(REAL, 'releases/v2.42.0/content.json'), 'utf8'));
+  const names = new Set(JSON.stringify(content).match(/images\/[^"]+/g).map((p) => p.replace('images/', '')));
+  const images = Object.fromEntries([...names].map((n, i) => [n, fakeJpeg(1800, 700 + (i % 4) * 150)]));
+  const bytes = pdf.buildReleasePdf({ entry, content, images, logo: fakeJpeg(480, 150), baseUrl: 'https://x.test/RevGen-i/releases/v2.42.0/', now: PDF_NOW });
+  const doc = readPdf(bytes);
+  assert.ok(doc.pages.length >= 6, `a release this size needs several pages (got ${doc.pages.length})`);
+  assert.equal(doc.images, names.size + 1, 'every screenshot and the logo are embedded once');
+  assert.match(doc.text, /v2\.42\.0/);
+  assert.ok(doc.text.includes(entry.title), 'the release title');
+  for (const it of content.items) assert.ok(doc.text.includes(it.title.replace(/\s+/g, ' ')), `item "${it.title}" is in the file`);
+  for (const sec of ['Overview', 'New Features', 'Enhancements & Improvements', 'Bug Fixes']) assert.ok(doc.text.includes(sec) || sec === 'Overview' && !content.overview, `section ${sec}`);
+  const figs = (doc.text.match(/Figure \d+/g) || []).length;
+  assert.equal(figs, (doc.pages.map((p) => (p.content.match(/ Do Q/g) || []).length).reduce((a, b) => a + b, 0)) - 1, 'one numbered caption per screenshot (the logo has none)');
+  doc.pages.forEach((p, i) => assert.ok(p.segs.some((g) => g.text === `Page ${i + 1} of ${doc.pages.length}`), `footer on page ${i + 1}`));
+  assert.match(doc.text, /support@commitmd\.us/);
+  // every piece of text sits inside the margins, so nothing is cut off or overlaps the edge
+  for (const [i, p] of doc.pages.entries()) for (const g of p.segs) {
+    const w = pdf.textWidth(g.text, g.font, g.font === 'c' ? g.size / 0.92 : g.size);
+    assert.ok(g.x >= 53.9 && g.x + w <= 595.28 - 54 + 0.6, `page ${i + 1}: "${g.text.slice(0, 30)}" runs from ${g.x} to ${(g.x + w).toFixed(1)}`);
+    assert.ok(g.y >= 20 && g.y <= 842, `page ${i + 1}: text inside the page vertically`);
+  }
+  assert.equal(Buffer.from(pdf.buildReleasePdf({ entry, content, images, logo: fakeJpeg(480, 150), baseUrl: 'https://x.test/RevGen-i/releases/v2.42.0/', now: PDF_NOW })).equals(Buffer.from(bytes)), true, 'the same input gives the same file');
+});
+
+test('pdf: long text wraps inside the width, long words are cut, nothing is lost', () => {
+  const runs = [{ t: 'Plain words that must wrap over several lines, ', f: 'r' }, { t: 'with bold ones', f: 'b' }, { t: ' and ', f: 'r' }, { t: 'https://example.com/' + 'a-very-long-path-segment/'.repeat(8), f: 'r' }, { t: ' end', f: 'r' }];
+  const lines = pdf.wrapRuns(runs, 10.5, 200);
+  assert.ok(lines.length > 3);
+  for (const ln of lines) assert.ok(ln.w <= 200.01, `a line is ${ln.w} wide`);
+  const joined = lines.map((l) => l.toks.map((t) => t.s).join('')).join(' ').replace(/\s+/g, '');
+  assert.equal(joined, runs.map((r) => r.t).join('').replace(/\s+/g, ''), 'every character is kept');
+  assert.deepEqual(pdf.wrapRuns([{ t: '', f: 'r' }], 10, 100).map((l) => l.toks.length), [0], 'an empty paragraph is one empty line');
+  assert.ok(Math.abs(pdf.textWidth('Hello', 'r', 10) - 22.78) < 0.001, 'Helvetica widths: H 722 e 556 l 222 l 222 o 556 = 2278 units');
+  assert.ok(pdf.textWidth('Hello', 'b', 10) > pdf.textWidth('Hello', 'r', 10), 'bold is wider');
+  assert.ok(Math.abs(pdf.textWidth('abc', 'c', 10) - 3 * 0.6 * 9.2) < 1e-9, 'code is set at 92% of the size, 600 units per character');
+});
+
+test('pdf: special characters are escaped and encoded, and what a PDF font cannot show becomes ?', () => {
+  const title = 'Reports (beta) \\ “Quoted” — café • 100% ✓ 😀 →';
+  const doc = readPdf(pdf.buildReleasePdf({ entry: entryOf({ title }), content: { items: [] }, now: PDF_NOW }));
+  assert.ok(doc.text.includes('Reports (beta) \\ “Quoted” — café • 100% ?'), `decoded: ${doc.text.slice(0, 120)}`);
+  assert.match(doc.text, /->/, 'an arrow becomes ->');
+  const raw = doc.pages[0].content;
+  assert.match(raw, /Reports \\\(beta\\\) \\\\ \\223Quoted\\224 \\227 caf\\351 \\225 100%/, 'parentheses and backslashes are escaped, quotes and dashes use their WinAnsi codes');
+  assert.match(doc.objs[3], /\/Title <FEFF/, 'the document title is stored as UTF-16');
+  assert.match(doc.objs[3], /\/CreationDate \(D:20261124103000Z\)/);
+  assert.equal(pdf.clean('a\tb\nc d​e'), 'a b c de');
+});
+
+test('pdf: links are clickable, relative ones resolve, unsafe ones are plain text', () => {
+  const content = { items: [{ category: 'new-feature', title: 'Links', summary: 'See [Docs](https://example.com/a(b)) and [the walkthrough](interactive-walkthrough.html) and [bad](javascript:alert(1)).', links: [{ label: 'Demo', url: 'https://example.com/demo', kind: 'video' }] }],
+    links: [{ label: 'Watch the demo', url: 'https://example.com/video', kind: 'video' }] };
+  const withBase = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content, baseUrl: 'https://x.test/RevGen-i/releases/v1.0.0/', now: PDF_NOW }));
+  const uris = withBase.pages.flatMap((p) => p.annots).map((a) => a.match(/\/URI \(((?:\\.|[^\\)])*)\)/)[1].replace(/\\(.)/g, '$1'));
+  assert.deepEqual(uris.sort(), ['https://example.com/a(b)', 'https://example.com/demo', 'https://example.com/video', 'https://x.test/RevGen-i/releases/v1.0.0/interactive-walkthrough.html', 'mailto:support@commitmd.us'].sort());
+  assert.match(withBase.text, /bad/, 'an unsafe link keeps its label as plain text');
+  assert.ok(!uris.some((u) => /javascript/i.test(u)));
+  const noBase = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content, now: PDF_NOW }));
+  const uris2 = noBase.pages.flatMap((p) => p.annots).map((a) => a.match(/\/URI \(((?:\\.|[^\\)])*)\)/)[1]);
+  assert.ok(!uris2.some((u) => /walkthrough/.test(u)), 'a relative link with nothing to resolve it against is not clickable');
+  for (const a of withBase.pages.flatMap((p) => p.annots)) assert.match(a, /^<< \/Type \/Annot \/Subtype \/Link \/Rect \[[\d. -]+\] \/Border \[0 0 0\] \/A << \/S \/URI \/URI \(/);
+});
+
+test('pdf: every block type renders; a missing screenshot is said so; draft and sample releases are marked', () => {
+  const img = { src: 'images/a.webp', alt: 'A', caption: 'First **shot**' };
+  const content = {
+    overview: ['First paragraph.', 'Second paragraph.'],
+    items: [
+      { category: 'enhancement', title: 'Everything', module: 'Claims', audience: ['Leads', 'Managers'], summary: 'Summary.', body: [
+        { type: 'p', text: 'A paragraph with `code` and **bold**.' }, { type: 'heading', text: 'A sub-heading' },
+        { type: 'list', ordered: false, items: ['bullet one', 'bullet two'] }, { type: 'list', ordered: true, items: ['first', 'second'] },
+        { type: 'callout', tone: 'important', text: 'Careful here.' }, { type: 'callout', tone: 'note', text: 'Just a note.' },
+        { type: 'image', ...img }, { type: 'image', src: 'images/missing.webp', alt: 'M' },
+        { type: 'gallery', images: [img, img, img, img] },
+        { type: 'steps', items: [{ title: 'Open it', audience: 'Leads', path: ['Home', 'Settings'], text: ['Do this.', 'Then that.'], note: 'Mind this.', images: [img] }, { title: 'Save it' }] },
+      ] },
+      { category: 'bug-fix', title: 'Plain fix', summary: 'Fixed.' },
+    ],
+  };
+  const doc = readPdf(pdf.buildReleasePdf({ entry: entryOf({ status: 'draft', sample: true, featured: true, type: 'major' }), content, images: { 'a.webp': fakeJpeg(900, 500) }, now: PDF_NOW }));
+  for (const t of ['Overview', 'Second paragraph.', 'A sub-heading', 'bullet two', '2. ', 'IMPORTANT', 'NOTE', 'Careful here.', 'Screenshot not available: missing.webp', 'Open it', 'Menu: Home › Settings', 'For Leads', 'Save it', 'Plain fix', 'Draft', 'Sample', 'Featured', 'Major release', 'Figure 7']) {
+    assert.ok(doc.text.includes(t), `"${t}" is in the file`);
+  }
+  assert.match(doc.text, /not published/);
+  assert.equal(doc.images, 1, 'one screenshot is embedded once however many times it is used');
+  const empty = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content: { items: [] }, now: PDF_NOW }));
+  assert.match(empty.text, /This release has no items yet\./);
+  assert.equal(empty.pages.length, 1);
+  const odd = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content: { items: [{ category: 'nonsense', title: 'x' }, { category: 'bug-fix', title: 'kept', summary: 's' }] }, now: PDF_NOW }));
+  assert.ok(odd.text.includes('kept') && !odd.text.includes(' x '), 'an item with an unknown category is left out instead of breaking the file');
+});
+
+test('pdf: a screenshot that almost fits is shrunk to finish the page; a much bigger one moves to the next page', () => {
+  // The same item with 1..70 filler lines before one 900x500 screenshot: find where the screenshot lands and how big it is.
+  const draw = (fill) => {
+    const content = { items: [{ category: 'bug-fix', title: 'T', summary: 'S', body: [...Array.from({ length: fill }, (_, i) => ({ type: 'p', text: `Filler line ${i}.` })), { type: 'image', src: 'images/a.webp', alt: 'A' }] }] };
+    const doc = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content, images: { 'a.webp': fakeJpeg(900, 500) }, now: PDF_NOW }));
+    const pageIdx = doc.pages.findIndex((p) => / Do Q/.test(p.content));
+    const m = doc.pages[pageIdx].content.match(/q ([\d.]+) 0 0 ([\d.]+) [\d.]+ ([\d.]+) cm \/Im1 Do Q/);
+    const lowest = Math.min(...doc.pages[0].segs.filter((g) => g.y > 40).map((g) => g.y));
+    return { pageIdx, w: Number(m[1]), roomBelowText: lowest - 64 }; // PDF y counts from the bottom; the bottom margin is 64
+  };
+  const natural = 487.28; // a 900x500 picture at the full text width
+  const runs = Array.from({ length: 70 }, (_, i) => ({ fill: i + 1, ...draw(i + 1) }));
+  const shrunk = runs.filter((r) => r.pageIdx === 0 && r.w < natural - 1);
+  assert.ok(shrunk.length >= 3, 'somewhere a screenshot is shrunk to finish the page instead of being pushed away');
+  for (const r of shrunk) assert.ok(r.w >= natural * 0.62 - 1, `never shrunk below about 62% (got ${Math.round(r.w / natural * 100)}%)`);
+  for (const r of runs.filter((x) => x.pageIdx === 1)) assert.ok(r.roomBelowText < 0.62 * 290 + 30, `with filler ${r.fill} the screenshot moved on although ${Math.round(r.roomBelowText)} pt were free`);
+  assert.ok(runs.some((r) => r.pageIdx === 1), 'and a screenshot that really does not fit still starts a new page');
+});
+
+test('pdf: many items flow onto more pages with the right footers; file names are safe', () => {
+  const items = Array.from({ length: 40 }, (_, i) => ({ category: ['new-feature', 'enhancement', 'improvement', 'bug-fix'][i % 4], title: `Item number ${i + 1}`, summary: 'A short summary of the change. '.repeat(6), body: [{ type: 'p', text: 'More detail about it. '.repeat(25) }] }));
+  const doc = readPdf(pdf.buildReleasePdf({ entry: entryOf(), content: { items }, now: PDF_NOW }));
+  assert.ok(doc.pages.length > 8);
+  doc.pages.forEach((p, i) => assert.ok(p.segs.some((g) => g.text === `Page ${i + 1} of ${doc.pages.length}`)));
+  for (let i = 1; i <= 40; i += 1) assert.ok(doc.text.includes(`Item number ${i}`), `item ${i}`);
+  assert.equal(pdf.pdfFileName({ version: '2.42.0', status: 'published' }), 'RevGen-i-release-notes-v2.42.0.pdf');
+  assert.equal(pdf.pdfFileName({ version: '2.43.0', status: 'draft' }), 'RevGen-i-release-notes-v2.43.0-draft.pdf');
+  assert.equal(pdf.pdfFileName({ version: '../../x"y', status: 'published' }), 'RevGen-i-release-notes-v....xy.pdf', 'a version can never put path characters in the file name');
 });
 
 test('the draft kept in the browser: text only, restored safely, never trusted blindly', () => {
