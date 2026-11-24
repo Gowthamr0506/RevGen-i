@@ -9,7 +9,7 @@
     more: $('#more'), empty: $('#empty'), clear: $('#clear'), err: $('#loadError'), spot: $('#spotlight') };
   const PAGE = 6;
   const state = { q: '', year: '', cat: '', featured: false, shown: PAGE };
-  let releases = [], latest = null, first = true;
+  let releases = [], allReleases = [], latest = null, first = true;
 
   /* ---------- URL <-> state, so a filtered view can be shared ---------- */
   function readUrl() {
@@ -59,6 +59,8 @@
     + (r.featured ? '<span class="chip featured' + (dark ? ' on-dark' : '') + '"><span aria-hidden="true">&#9733;</span> Featured</span>' : '')
     + (r.status === 'draft' ? '<span class="chip draft">Draft</span>' : '') + (r.sample ? '<span class="chip sample' + (dark ? ' on-dark' : '') + '">Sample</span>' : '');
   const linkText = (r) => esc(r.title) + '<span class="sr"> (version ' + esc(r.version) + ' release notes)</span>';
+  // a small button that downloads this release as a PDF (not shown for hand-written pages, which have no content to draw)
+  const pdfBtn = (r) => RN.pdfAvailable(r) ? '<button class="pdf-mini" type="button" data-pdf="' + esc(r.version) + '">Download PDF<span class="sr"> of version ' + esc(r.version) + ' release notes</span></button>' : '';
 
   function card(r, t, i) {
     return '<article class="card' + (first ? ' rv' : '') + '" data-i="' + (i % PAGE) + '">'
@@ -67,12 +69,12 @@
       + '<h3><a href="' + href(r) + '">' + linkText(r) + '</a></h3>'
       + '<p class="card-sum">' + esc(r.summary || '') + '</p>' + matchNote(r, t)
       + '<div class="card-cats">' + catChips(r) + '</div>'
-      + '<span class="card-go">View release notes <span class="arr" aria-hidden="true">&rarr;</span></span></article>';
+      + '<div class="card-foot"><span class="card-go">View release notes <span class="arr" aria-hidden="true">&rarr;</span></span>' + pdfBtn(r) + '</div></article>';
   }
   function row(r) {
     return '<li class="row"><span class="row-ver">v' + esc(r.version) + '</span><time class="row-date" datetime="' + r.date + '">' + fmtDate(r.date) + '</time>'
       + '<div class="row-main"><h3><a href="' + href(r) + '">' + linkText(r) + '</a></h3><p>' + esc(r.summary || '') + '</p></div>'
-      + '<div class="row-chips">' + flags(r) + catChips(r) + '</div><span class="row-arr" aria-hidden="true">&rarr;</span></li>';
+      + '<div class="row-chips">' + flags(r) + catChips(r) + pdfBtn(r) + '</div><span class="row-arr" aria-hidden="true">&rarr;</span></li>';
   }
   function spotlight(r) {
     const d = derived(r), c = d.cover;
@@ -86,7 +88,8 @@
       + '<h3>' + esc(r.title) + '</h3><p class="spot-sum">' + esc(r.summary || '') + '</p>'
       + (tiles ? '<div class="spot-tiles">' + tiles + '</div>' : '')
       + '<div class="spot-cta"><a class="btn btn-primary" href="' + href(r) + '">View release notes <span class="arr" aria-hidden="true">&rarr;</span></a>'
-      + '<a class="btn btn-light" href="' + RN.root + 'releases/">Browse all releases</a></div></div>' + media + '</article>';
+      + '<a class="btn btn-light" href="' + RN.root + 'releases/">Browse all releases</a>'
+      + (RN.pdfAvailable(r) ? '<button class="btn btn-light" type="button" data-pdf="' + esc(r.version) + '">Download PDF</button>' : '') + '</div></div>' + media + '</article>';
   }
 
   /* ---------- render ---------- */
@@ -151,6 +154,12 @@
   el.cats.addEventListener('click', (e) => { const b = e.target.closest('.fchip'); if (!b) return; state.cat = b.dataset.cat; syncControls(); update(); });
   el.clear.addEventListener('click', () => { Object.assign(state, { q: '', year: '', cat: '', featured: false }); syncControls(); update(); });
   if (el.more) el.more.addEventListener('click', () => { state.shown += PAGE; render(); });
+  document.addEventListener('click', (e) => { // every "Download PDF" button on the page (spotlight, cards, rows)
+    const b = e.target.closest('[data-pdf]');
+    if (!b) return;
+    const r = allReleases.find((x) => x.version === b.dataset.pdf);
+    if (r) RN.downloadPdf(r, b);
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !e.metaKey && !e.ctrlKey) {
       e.preventDefault(); el.q.focus(); el.q.select();
@@ -160,7 +169,7 @@
   /* ---------- go ---------- */
   readUrl();
   RN.loadReleases().then((res) => {
-    releases = res.visible; latest = res.latest;
+    releases = res.visible; latest = res.latest; allReleases = res.all;
     if (el.spot) {
       el.spot.innerHTML = latest ? spotlight(latest) : '<div class="spot-empty">No releases have been published yet.</div>';
       RN.reveal(el.spot);

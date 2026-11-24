@@ -41,6 +41,31 @@
     });
   }
 
+  /* ---------- PDF download ----------
+     The PDF code (assets/js/pdf-browser.mjs) is only fetched when someone asks for a PDF, so pages load exactly as before.
+     It reads the release's content.json and screenshots from this site and builds the file in the browser. */
+  const SELF = document.currentScript && document.currentScript.src;
+  const siteRoot = () => new URL(root, location.href).href;
+  // a hand-written (custom) page has no content.json to draw; from disk (file:) nothing can be fetched
+  const pdfAvailable = (r) => !!r && r.page !== 'custom' && location.protocol !== 'file:' && !!SELF;
+  let live = null;
+  const announce = (text) => {
+    if (!live) { live = document.createElement('p'); live.className = 'sr'; live.setAttribute('role', 'status'); document.body.appendChild(live); }
+    live.textContent = text;
+  };
+  function downloadPdf(release, button) {
+    if (!button || button.getAttribute('aria-busy') === 'true') return Promise.resolve();
+    const original = button.innerHTML; // keeps any screen-reader-only text that is part of the button
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Preparing PDF…';
+    announce('Preparing the PDF…');
+    const restore = (wait) => setTimeout(() => { button.innerHTML = original; button.removeAttribute('aria-busy'); }, wait);
+    return import(new URL('pdf-browser.mjs', SELF).href)
+      .then((lib) => lib.downloadSiteReleasePdf({ entry: release, siteRoot: siteRoot() }))
+      .then(() => { announce('The PDF has been downloaded.'); button.textContent = 'PDF downloaded'; restore(2200); })
+      .catch(() => { announce('The PDF could not be created. Try again.'); button.textContent = 'PDF failed. Try again'; restore(3500); });
+  }
+
   // Mark the header link that points at this page (links with a #hash are anchors, not pages).
   document.querySelectorAll('.nav-links a').forEach((a) => {
     const u = new URL(a.getAttribute('href'), location.href);
@@ -48,5 +73,5 @@
   });
   reveal();
 
-  window.RN = { root, CATS, TYPES, esc, order, fmtDate, catById, loadReleases, reveal, includeDrafts, reduceMotion };
+  window.RN = { root, CATS, TYPES, esc, order, fmtDate, catById, loadReleases, reveal, includeDrafts, reduceMotion, pdfAvailable, downloadPdf };
 })();

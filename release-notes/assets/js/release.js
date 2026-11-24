@@ -40,6 +40,13 @@
   RN.loadReleases().then(({ visible, latest }) => {
     const i = visible.findIndex((r) => r.version === version);
     if (i < 0) return;
+    const entry = visible[i], actions = document.querySelector('.rel-actions');
+    if (actions && RN.pdfAvailable(entry)) { // added here (not in the page's HTML) so no existing release page changes
+      const pdf = document.createElement('button');
+      pdf.className = 'btn btn-outline btn-sm'; pdf.type = 'button'; pdf.textContent = 'Download PDF';
+      pdf.addEventListener('click', () => RN.downloadPdf(entry, pdf));
+      actions.appendChild(pdf);
+    }
     const nav = document.querySelector('[data-pager]');
     const link = (r, cls, dir) => '<a class="pager-link ' + cls + '" rel="' + cls + '" href="../v' + RN.esc(r.version) + '/"><span class="pager-dir">' + dir
       + '</span><span class="pager-ver">v' + RN.esc(r.version) + '</span><span class="pager-title">' + RN.esc(r.title) + '</span></a>';
