@@ -35,6 +35,19 @@ What Claude runs (you can run these yourself; Node 20 or newer):
 
 Open the pages through `serve`, not by double-clicking `index.html`: browsers block a page from reading `releases.json` from disk. (Individual release pages are static and read fine from disk; the live site is unaffected.)
 
+## The interactive walkthrough
+
+Every release gets an **Interactive walkthrough** button by itself, as long as it has something to walk through: at least one section, one numbered step or one screenshot. Nothing to author or switch on; the walkthrough is made from the same `content.json` as the page.
+
+- **Where:** the first button in the release page's row (before *Copy link* and *Download PDF*) and in the landing page's latest-release spotlight.
+- **What it does:** opens a full-screen viewer that starts with a short introduction (version, date, how many features of each kind), then goes through every feature in turn, **one stop for each of its sections or steps**, with that part's screenshots and explanation. A feature with no sections or steps is one stop. The outline on the left (a drop-down on phones) jumps to any stop.
+- **How to use it:** *Next* / *Back*, or the **left and right arrow keys**; *Auto-play* advances every 8 seconds (off until pressed); click a screenshot to enlarge it; *Esc* closes (first the enlarged screenshot, then the walkthrough). Opening a release page with `#walkthrough` or `#walkthrough-3` in the address opens it straight on that stop, so a stop can be shared as a link.
+- **How the website knows:** `build` records `derived.walk` (the number of stops) in `releases.json` for each release that qualifies, and the page's script shows the button when it is there. A release with no sections, steps or screenshots shows no button.
+- **v2.42.0 keeps its hand-built walkthrough** (the page with try-it widgets and the claim simulator, linked from the release). A release that links a page whose label contains "walkthrough" is never given a generated one, so the two never appear side by side. A hand-written page (`"page": "custom"`) has none either.
+- **Nothing extra is loaded** until the button is pressed (`assets/js/walkthrough-ui.mjs` is fetched on demand), and no third-party code is used. The viewer reads the release's `content.json` and screenshots from the site itself, so it needs `http(s)` (not a file opened from disk).
+
+The slides are built by `assets/js/walkthrough.mjs` (pure, tested in `tools/tests/composer.test.mjs`) using the same renderer as the page, so a screenshot, list or note looks the same in both. To get a good walkthrough, give each feature's parts as **sections** (or steps): that is what becomes a stop.
+
 ## Downloading a release as a PDF
 
 Every published release can be downloaded as a PDF, from four places:
@@ -99,7 +112,7 @@ releases/vX.Y.Z/
   images/                 screenshots for this release
 admin/                    the manual release composer page (index.html, admin.mjs, core.mjs, editor.mjs, preview.mjs, admin.css)
 templates/                release.html + shared head/header/footer partials (one copy of each)
-assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts; js/render-shared.mjs = the release-page renderer shared by the build and the composer's preview; js/pdf.mjs + js/pdf-browser.mjs = the PDF download
+assets/                   one stylesheet, a few small scripts, the official logo (images/logo.svg), favicon, self-hosted fonts; js/render-shared.mjs = the release-page renderer shared by the build and the composer's preview; js/pdf.mjs + js/pdf-browser.mjs = the PDF download; js/walkthrough.mjs + js/walkthrough-ui.mjs = the interactive walkthrough
 tools/                    rn.mjs CLI + tests (Node built-ins only)
 ```
 
