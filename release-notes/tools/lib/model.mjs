@@ -7,6 +7,7 @@ import {
 } from './util.mjs';
 import { readImageInfo } from './images.mjs';
 import { itemId } from '../../assets/js/render-shared.mjs';
+import { countStops, offersWalkthrough } from '../../assets/js/walkthrough.mjs';
 
 export const SECTION_IDS = ['overview', 'new-features', 'enhancements-improvements', 'bug-fixes'];
 const AUTHORED = ['version', 'date', 'type', 'status', 'featured', 'sample', 'page', 'title', 'summary', 'tags', 'derived'];
@@ -269,6 +270,9 @@ export function derive(project, rec) {
     const info = project.imageInfo.get(rel);
     derived.cover = { src: rel, alt: cover.alt || '', ...(info ? { w: info.w, h: info.h } : {}) };
   }
+  // "walk": how many stops the generated interactive walkthrough has. Absent when there is nothing to walk through, or when the
+  // release links its own walkthrough page. The release pages and the landing page read this to show the button.
+  if (rec.content && offersWalkthrough(rec.content)) derived.walk = countStops(rec.content);
   return derived;
 }
 
