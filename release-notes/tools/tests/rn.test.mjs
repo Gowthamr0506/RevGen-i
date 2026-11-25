@@ -102,6 +102,21 @@ test('sections are checked: images inside them must exist and be described, and 
   assert.equal(rn(root, 'build').code, 1, 'a broken section stops the build');
 });
 
+test('the build records which releases get an interactive walkthrough (derived.walk)', () => {
+  const root = makePortal();
+  addRelease(root, '1.0.0', { items: [ITEM({ title: 'Plain', summary: 'Text only.' }), ITEM({ category: 'bug-fix', title: 'A fix', summary: 'Fixed.' })] });
+  addRelease(root, '1.1.0', { items: [ITEM({ title: 'Parts', body: [{ type: 'section', title: 'One', body: [{ type: 'p', text: 'x' }] }, { type: 'section', title: 'Two', body: [{ type: 'p', text: 'y' }] }] }), ITEM({ category: 'bug-fix', title: 'B', summary: 's' })] });
+  addRelease(root, '1.2.0', { links: [{ label: 'Interactive walkthrough', url: 'https://example.test/walk', kind: 'demo' }], items: [ITEM({ body: [{ type: 'steps', items: [{ title: 'Step' }] }] })] });
+  addRelease(root, '1.3.0', { items: [ITEM({ body: [{ type: 'steps', items: [{ title: 'A' }, { title: 'B' }] }] })] });
+  assert.equal(rn(root, 'build').code, 0);
+  const derived = Object.fromEntries(JSON.parse(fs.readFileSync(path.join(root, 'releases.json'), 'utf8')).releases.map((r) => [r.version, r.derived]));
+  assert.equal(derived['1.0.0'].walk, undefined, 'text only: no walkthrough');
+  assert.equal(derived['1.1.0'].walk, 3, 'two sections plus the other feature: three stops');
+  assert.equal(derived['1.2.0'].walk, undefined, 'a release that links its own walkthrough keeps that one');
+  assert.equal(derived['1.3.0'].walk, 2, 'one stop per step');
+  assert.match(rn(root, 'build').out, /Wrote 0 files/, 'and the result is stable');
+});
+
 test('adding a release leaves every other release byte-identical', () => {
   const root = makePortal();
   addRelease(root, '1.0.0');

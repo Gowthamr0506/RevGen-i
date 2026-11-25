@@ -12,6 +12,7 @@ import * as core from '../../admin/core.mjs';
 import * as preview from '../../admin/preview.mjs';
 import * as editor from '../../admin/editor.mjs';
 import * as pdf from '../../assets/js/pdf.mjs';
+import * as walk from '../../assets/js/walkthrough.mjs';
 
 const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RN = path.join(REAL, 'tools', 'rn.mjs');
@@ -501,7 +502,7 @@ test('the preview frame stays locked down: no scripts, no popups, and the page C
 });
 
 test('the shared renderer is browser-safe: no imports and no Node APIs', () => {
-  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs', 'admin/editor.mjs', 'assets/js/pdf.mjs']) {
+  for (const f of ['assets/js/render-shared.mjs', 'admin/preview.mjs', 'admin/editor.mjs', 'assets/js/pdf.mjs', 'assets/js/walkthrough.mjs', 'assets/js/walkthrough-ui.mjs']) {
     const src = fs.readFileSync(path.join(REAL, f), 'utf8');
     assert.ok(!/node:|\bprocess\b|\bBuffer\b|\brequire\(|\bfs\./.test(src), `${f} must not use Node APIs`);
   }
@@ -661,6 +662,105 @@ test('sections: the real build accepts what the composer writes, and the preview
   const prep = preview.prepare(v.entry, v.content, '2026-01-01');
   assert.deepEqual([prep.missing, prep.omitted], [[], []]);
   assert.equal(mainOf(preview.previewDocument({ ...prep, imageInfo: () => ({ w: 64, h: 40 }), root: '../../' })), built, 'the preview of a sectioned release is the published page');
+});
+
+/* ------------------------------------------------------------------ interactive walkthrough */
+const WALK_ENTRY = { version: '1.0.0', date: '2026-01-01', type: 'minor', title: 'The release', summary: 'What is new.' };
+const walkContent = () => ({ overview: ['An intro.'], items: [
+  { category: 'bug-fix', title: 'A fix', summary: 'Fixed.', body: [{ type: 'p', text: 'Details.' }, { type: 'list', items: ['a', 'b'] }] },
+  { category: 'new-feature', title: 'Multi', summary: 'Has parts.', module: 'Claims', audience: ['Leads'], body: [
+    { type: 'p', text: 'Lead-in.' },
+    { type: 'section', title: 'Turn **it** on', body: [{ type: 'p', text: 'x' }, { type: 'image', src: 'images/a.png', alt: 'A', caption: 'Cap' }, { type: 'steps', items: [{ title: 'inner' }] }] },
+    { type: 'section', body: [{ type: 'gallery', images: [{ src: 'images/b.png', alt: 'B' }, { src: 'images/c.png', alt: 'C' }] }, { type: 'steps', items: [{ title: 'inner again' }] }] },
+  ] },
+  { category: 'new-feature', title: 'Steps one', summary: 'S', body: [
+    { type: 'steps', items: [{ title: 'Open', text: ['t1', 't2'], audience: 'Leads', path: ['Home', 'Settings'], images: [{ src: 'images/d.png', alt: 'D' }], note: 'Mind this.' }, { title: 'Save' }] },
+    { type: 'callout', text: 'After.' },
+  ] },
+  { category: 'enhancement', title: 'Enh', summary: 'e' },
+] });
+
+test('walkthrough: an introduction, then one stop per section, step or feature, in the order of the release page', () => {
+  const w = walk.buildWalkthrough({ entry: WALK_ENTRY, content: walkContent() });
+  assert.deepEqual(w.groups.map((g) => g.label), ['New feature 1', 'New feature 2', 'Enhancement', 'Bug fix'], 'new features first, as on the page, numbered within their kind');
+  assert.deepEqual(w.stops.map((s) => `${w.groups[s.gi].title}|${s.kind}|${s.title}|${s.kicker}`), [
+    'Multi|overview|Overview|', 'Multi|section|Turn **it** on|Section 1 of 2', 'Multi|section||Section 2 of 2',
+    'Steps one|step|Open|Step 1 of 2', 'Steps one|step|Save|Step 2 of 2', 'Steps one|overview|More|',
+    'Enh|overview||', 'A fix|overview||',
+  ]);
+  assert.deepEqual(w.stops.filter((s) => s.first).map((s) => w.groups[s.gi].title), ['Multi', 'Steps one', 'Enh', 'A fix'], 'the first stop of each feature carries its description');
+  assert.deepEqual(w.stops.map((s) => s.media), [false, true, true, true, false, false, false, false]);
+  assert.deepEqual([w.intro.steps, w.intro.features, w.intro.version, w.intro.date, w.intro.typeLabel], [8, 4, '1.0.0', 'January 1, 2026', 'Minor release']);
+  assert.deepEqual(w.intro.counts, [{ label: 'New Features', n: 2 }, { label: 'Enhancement', n: 1 }, { label: 'Bug fix', n: 1 }]);
+  assert.equal(walk.countStops(walkContent()), 8);
+  assert.deepEqual(walk.buildWalkthrough({ entry: WALK_ENTRY, content: { items: [{ category: 'nope', title: 'x' }] } }).stops, [], 'an item with an unknown kind is left out');
+});
+
+test('walkthrough: stops are drawn like the release page, with screenshots in their own column, and everything is escaped', () => {
+  const w = walk.buildWalkthrough({ entry: WALK_ENTRY, content: walkContent() });
+  const opts = { imgBase: '/site/releases/v1.0.0/' };
+  const first = walk.renderStop(w, 0, opts), sec1 = walk.renderStop(w, 1, opts), sec2 = walk.renderStop(w, 2, opts), step = walk.renderStop(w, 3, opts), enh = walk.renderStop(w, 6, opts);
+  assert.match(first, /class="chip cat-new-feature">New feature 1<\/span>/);
+  assert.match(first, /<span class="wt-mod">Claims<\/span><span class="wt-for">For Leads<\/span>/);
+  assert.match(first, /<p class="wt-sum">Has parts\.<\/p>/);
+  assert.match(first, /<h2 class="wt-h">Multi<\/h2>|<h2 class="wt-h">Overview<\/h2>/);
+  assert.match(sec1, /<span class="wt-pos">Section 1 of 2<\/span>/);
+  assert.match(sec1, /<p class="wt-feature">Multi<\/p><h2 class="wt-h">Turn <strong>it<\/strong> on<\/h2>/, 'the feature stays visible above the section title');
+  assert.ok(!sec1.includes('Has parts.'), 'only the first stop repeats the description');
+  assert.match(sec1, /class="wt-content has-media"><div class="wt-media"><figure class="shot">.*src="\/site\/releases\/v1\.0\.0\/images\/a\.png".*<\/div><div class="wt-text blocks"><p>x<\/p>/s, 'the screenshot is in the media column, the text beside it');
+  assert.match(sec2, /<h2 class="wt-h">Multi<\/h2>/, 'an untitled section is headed by its feature');
+  assert.match(sec2, /gallery gallery-2/);
+  assert.match(step, /For Leads<span class="wt-dot" aria-hidden="true"><\/span>Menu: Home &#8250; Settings/);
+  assert.match(step, /<div class="wt-media">.*d\.png.*<div class="wt-text blocks"><p>t1<\/p><p>t2<\/p><aside class="callout callout-note">/s);
+  assert.ok(!/class="wt-content/.test(enh), 'a feature with nothing but a description has no content area');
+  // every id on every stop is unique when the stops are drawn one after another (steps inside sections included)
+  const ids = w.stops.flatMap((_, i) => [...walk.renderStop(w, i, opts).matchAll(/ id="([^"]+)"/g)].map((m) => m[1]));
+  assert.equal(new Set(ids).size, ids.length, 'unique ids across stops');
+  assert.ok(ids.includes('wt-2-step-1') && ids.includes('wt-3-step-1'));
+  // nothing a person typed can inject markup
+  const evil = '<img src=x onerror=alert(1)>';
+  const bad = walk.buildWalkthrough({ entry: { ...WALK_ENTRY, title: evil, summary: evil }, content: { overview: [evil], items: [{ category: 'new-feature', title: evil, summary: evil, module: evil, audience: [evil], body: [{ type: 'section', title: evil, body: [{ type: 'p', text: evil }, { type: 'callout', tone: evil, text: evil }] }] }] } });
+  const html = walk.renderIntro(bad) + bad.stops.map((_, i) => walk.renderStop(bad, i)).join('');
+  assert.ok(!html.includes('<img src=x'), 'markup is escaped');
+  assert.ok(!/onerror=alert\(1\)>/.test(html.replace(/&lt;img src=x onerror=alert\(1\)&gt;/g, '')), 'no live event handler survives');
+  assert.match(walk.renderIntro(w), /v1\.0\.0.*January 1, 2026.*The release.*An intro\..*8 stops across 4 features/s);
+});
+
+test('walkthrough: offered when there is something to walk through, and not when the release brings its own', () => {
+  const text = { items: [{ category: 'bug-fix', title: 'x', summary: 'y', body: [{ type: 'p', text: 't' }] }, { category: 'enhancement', title: 'z', summary: 'w' }] };
+  assert.equal(walk.offersWalkthrough(text), false, 'text only: nothing to step through');
+  const withImage = { items: [{ category: 'bug-fix', title: 'x', summary: 'y', body: [{ type: 'image', src: 'images/a.png', alt: 'a' }] }] };
+  assert.equal(walk.offersWalkthrough(withImage), true);
+  assert.equal(walk.offersWalkthrough({ items: [{ category: 'bug-fix', title: 'x', summary: 'y', body: [{ type: 'section', title: 's', body: [{ type: 'p', text: 't' }] }] }] }), true, 'a section is enough');
+  assert.equal(walk.offersWalkthrough({ items: [{ category: 'bug-fix', title: 'x', summary: 'y', body: [{ type: 'steps', items: [{ title: 'a' }] }] }] }), true, 'steps are enough');
+  assert.equal(walk.offersWalkthrough({ ...withImage, links: [{ label: 'Interactive walkthrough', url: 'walk.html', kind: 'demo' }] }), false, 'a release with its own walkthrough keeps it');
+  assert.equal(walk.offersWalkthrough({ ...withImage, links: [{ label: 'Watch the demo', url: 'https://x.test', kind: 'video' }] }), true, 'other links do not matter');
+  for (const nothing of [null, undefined, 'x', 7, {}, { items: [] }]) assert.equal(walk.offersWalkthrough(nothing), false);
+  assert.equal(walk.hasImage([{ type: 'section', body: [{ type: 'steps', items: [{ title: 'a', images: [{ src: 'images/a.png', alt: 'a' }] }] }] }]), true, 'screenshots are found inside sections and steps');
+  // the real v2.42.0 release: its own hand-built walkthrough is kept, yet the generated tour still draws every stop
+  const real = JSON.parse(fs.readFileSync(path.join(REAL, 'releases/v2.42.0/content.json'), 'utf8'));
+  assert.equal(walk.offersWalkthrough(real), false);
+  const w = walk.buildWalkthrough({ entry: WALK_ENTRY, content: real });
+  assert.ok(w.stops.length > 12, `v2.42.0 has ${w.stops.length} stops`);
+  w.stops.forEach((_, i) => assert.match(walk.renderStop(w, i, { imgBase: '/x/' }), /<h2 class="wt-h">.+<\/h2>/));
+});
+
+test('walkthrough: a lone heading above the steps is not a stop of its own, but real text above them is', () => {
+  const item = (body) => ({ items: [{ category: 'new-feature', title: 'F', summary: 's', body }] });
+  const steps = { type: 'steps', items: [{ title: 'A' }, { title: 'B' }] };
+  const lone = walk.buildWalkthrough({ entry: WALK_ENTRY, content: item([{ type: 'heading', text: 'How to' }, steps, { type: 'heading', text: 'The end' }]) });
+  assert.deepEqual(lone.stops.map((s) => `${s.kind}|${s.title}|${s.first}`), ['step|A|true', 'step|B|false'], 'no empty "Overview"/"More" slides');
+  const real = walk.buildWalkthrough({ entry: WALK_ENTRY, content: item([{ type: 'heading', text: 'How to' }, { type: 'p', text: 'Read this first.' }, steps]) });
+  assert.deepEqual(real.stops.map((s) => `${s.kind}|${s.title}`), ['overview|Overview', 'step|A', 'step|B']);
+  assert.deepEqual(real.stops[0].blocks.map((b) => b.type), ['heading', 'p'], 'the heading stays with the text it introduces');
+  assert.equal(walk.buildWalkthrough({ entry: WALK_ENTRY, content: item([{ type: 'heading', text: 'Only a heading' }]) }).stops.length, 1, 'a feature always has at least one stop');
+});
+
+test('walkthrough viewer: nothing inline, nothing evaluated (the page CSP forbids it)', () => {
+  const src = fs.readFileSync(path.join(REAL, 'assets/js/walkthrough-ui.mjs'), 'utf8');
+  for (const bad of [/\bstyle=/, /<script/i, /\beval\(/, /new Function/, /javascript:/i, /setAttribute\(\s*['"]style/, /cssText/, /document\.write/, /\bfetch\(\s*['"]https?:/]) assert.ok(!bad.test(src), `walkthrough-ui.mjs must not match ${bad}`);
+  // the only network request is for the release's own content.json, relative to the site root it is given
+  assert.deepEqual([...src.matchAll(/\bfetch\(([^)]*)\)/g)].map((m) => m[1].split(',')[0]), ['`${base}content.json`']);
 });
 
 /* ------------------------------------------------------------------ PDF download */
