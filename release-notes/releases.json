@@ -99,6 +99,15 @@
       "featured": false,
       "title": "Executive Summary – CommitMD v2.38.0",
       "summary": "Version 2.38.0 delivers meaningful advancements in CommitMD’s mission to streamline billing workflows, reduce denials, and improve operational control."
+    },
+    {
+      "version": "3.46.0",
+      "date": "2026-11-25",
+      "type": "minor",
+      "status": "published",
+      "featured": false,
+      "title": "RevGen-i v2.41.0",
+      "summary": "Version 2.41.0 delivers major enhancements with the introduction of three key modules: MMS Appeal Submission, Remittance Review, and Payment Reconciliation."
     }
   ]
 }

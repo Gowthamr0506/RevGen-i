@@ -1,0 +1,118 @@
+{
+  "overview": [
+    "•MMS Appeal Submission Module: Simplifies creation and submission of payer appeals using structured templates and document management, with support for attachments and progress tracking. •Remittance Review: Automates check-level ERA parsing within the payment workflow to interpret remittance files and identify visits ready for posting or requiring manual review. •Payment Reconciliation Module: Matches system deposits with bank statements, providing visibility into reconciled and unreconciled items while improving financial tracking accuracy."
+  ],
+  "items": [
+    {
+      "category": "new-feature",
+      "title": "MMS Appeal Submission Module",
+      "summary": "RevGen-i simplifies the appeal creation workflow by enabling users to generate appeals using dynamic templates and easily edit required details. Users can save appeals, preview the final consolidated appeal package, and submit appeals to the payer with reduced manual effort and improved efficiency.",
+      "body": [
+        {
+          "type": "section",
+          "title": "Step 1",
+          "body": [
+            {
+              "type": "p",
+              "text": "Users can create and manage appeal form templates by navigating to Home → System Settings → Appeal Form Template, where they can define the title, subject, description, and utilize predefined keywords to include dynamic patient-specific data, helping standardize the appeal creation process."
+            },
+            {
+              "type": "image",
+              "src": "images/screenshot.webp",
+              "alt": "fig 1"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Step 2",
+          "body": [
+            {
+              "type": "p",
+              "text": "Users should initiate an appeal through the Raise an Appeal option available at the three-dot dropdown menu in Patient Demographics, where the appeal is created using visit-related information."
+            },
+            {
+              "type": "image",
+              "src": "images/screenshot-2.webp",
+              "alt": "fig2"
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Step 3",
+          "body": [
+            {
+              "type": "p",
+              "text": "The user should select a single visit using the checkbox, which loads the default carrier (changeable if needed). Clicking Create Appeal validates the selection, locks the visit and carrier, and loads the appeal data to proceed."
+            },
+            {
+              "type": "image",
+              "src": "images/screenshot-3.webp",
+              "alt": "fig 3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "new-feature",
+      "title": "Remittance Review",
+      "summary": "When an ERA file is uploaded, RevGen-i automatically extracts and interprets payments, adjustments, and visit-level details, transforming raw data into a structured format. This enables users to review, validate, and post visits in bulk, significantly improving efficiency compared to manual or one-by-one processing while ensuring accuracy and consistency."
+    },
+    {
+      "category": "enhancement",
+      "title": "Enhancements",
+      "summary": "Enhancements",
+      "body": [
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            "1. Denial claim Reversal.",
+            "CPT descriptions.",
+            "Carrier- DOS range validation.",
+            "EDI file upload.",
+            "Patient account number field addition.",
+            "Deceased patient as responsible party or subscriber.",
+            "Remove responsible party.",
+            "Capitation balance display.",
+            "Charges report Enhancement.",
+            "Bulk upload claims - nitial change log not displaying.",
+            "Account service location include in Box 32."
+          ]
+        }
+      ]
+    },
+    {
+      "category": "bug-fix",
+      "title": "Bug Fixes in Prod Demo",
+      "body": [
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            ". Logo UI issue very large and small screens.",
+            "Note display of previous patient after patient switch."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "3 .Un-apply reversal void."
+        },
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            "Unapply transfer.",
+            "Transaction level void balance showing wrong.",
+            "Note Bulk upload.",
+            "weekly unfocused claims table breaking.",
+            "Multiple records exist with the same carrier master name.",
+            "Ordering facility NPI not displaying."
+          ]
+        }
+      ]
+    }
+  ]
+}
