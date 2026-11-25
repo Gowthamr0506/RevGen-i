@@ -71,8 +71,10 @@ function figure(img, ctx) {
     `<span class="shot-zoom" aria-hidden="true">Enlarge</span><span class="sr"> (opens enlarged image)</span></a>${cap}</figure>`;
 }
 const gallery = (images, ctx) => `<div class="gallery gallery-${Math.min(images.length, 3)}">${images.map((i) => figure(i, ctx)).join('')}</div>`;
-const callout = (text, tone = 'note') =>
-  `<aside class="callout callout-${tone}"><span class="callout-label">${tone === 'important' ? 'Important' : 'Note'}</span><p>${inline(text)}</p></aside>`;
+const callout = (text, tone = 'note') => {
+  const t = tone === 'important' ? 'important' : 'note'; // only the two known styles, whatever the content says
+  return `<aside class="callout callout-${t}"><span class="callout-label">${t === 'important' ? 'Important' : 'Note'}</span><p>${inline(text)}</p></aside>`;
+};
 
 function linkButton(l) {
   const ext = isExternal(l.url);
@@ -95,6 +97,15 @@ function steps(block, ctx, parentId) {
       (s.note ? callout(s.note) : '') + `</div></li>`;
   });
   return `<ol class="steps">${lis.join('')}</ol>`;
+}
+
+/**
+ * Draws a list of blocks (paragraphs, lists, screenshots, notes, steps) exactly as a release page does.
+ * Used by the interactive walkthrough. idPrefix keeps the ids of steps unique when several slides are drawn.
+ */
+export function renderBlocks(blocks, { imageInfo = () => undefined, imgSrc = encodeSrc, idPrefix = 'wt' } = {}) {
+  const ctx = { imageInfo, imgSrc, totals: {}, nums: new Map() };
+  return (blocks ?? []).map((b) => block(b, ctx, idPrefix)).join('');
 }
 
 /** A numbered part of a feature (Section 1, Section 2, ...): its own text and screenshots. n = its number within the feature. */

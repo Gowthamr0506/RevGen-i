@@ -41,7 +41,16 @@
     const i = visible.findIndex((r) => r.version === version);
     if (i < 0) return;
     const entry = visible[i], actions = document.querySelector('.rel-actions');
-    if (actions && RN.pdfAvailable(entry)) { // added here (not in the page's HTML) so no existing release page changes
+    // The buttons are added here (not in the page's HTML) so no existing release page changes.
+    if (actions && RN.walkAvailable(entry)) { // the generated step-through of this release, first in the row like the hand-built one on v2.42.0
+      const walk = document.createElement('button');
+      walk.className = 'btn btn-primary btn-sm'; walk.type = 'button'; walk.textContent = 'Interactive walkthrough';
+      walk.addEventListener('click', () => RN.openWalkthrough(entry, { hash: true }));
+      actions.insertBefore(walk, actions.firstChild);
+      const m = /^#walkthrough(?:-(\d+))?$/.exec(location.hash); // a shared link opens straight on that stop
+      if (m) RN.openWalkthrough(entry, { hash: true, start: Number(m[1] || 0) });
+    }
+    if (actions && RN.pdfAvailable(entry)) {
       const pdf = document.createElement('button');
       pdf.className = 'btn btn-outline btn-sm'; pdf.type = 'button'; pdf.textContent = 'Download PDF';
       pdf.addEventListener('click', () => RN.downloadPdf(entry, pdf));

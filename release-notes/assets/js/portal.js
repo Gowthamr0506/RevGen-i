@@ -89,6 +89,7 @@
       + (tiles ? '<div class="spot-tiles">' + tiles + '</div>' : '')
       + '<div class="spot-cta"><a class="btn btn-primary" href="' + href(r) + '">View release notes <span class="arr" aria-hidden="true">&rarr;</span></a>'
       + '<a class="btn btn-light" href="' + RN.root + 'releases/">Browse all releases</a>'
+      + (RN.walkAvailable(r) ? '<button class="btn btn-light" type="button" data-walk="' + esc(r.version) + '">Interactive walkthrough</button>' : '')
       + (RN.pdfAvailable(r) ? '<button class="btn btn-light" type="button" data-pdf="' + esc(r.version) + '">Download PDF</button>' : '') + '</div></div>' + media + '</article>';
   }
 
@@ -159,6 +160,11 @@
     if (!b) return;
     const r = allReleases.find((x) => x.version === b.dataset.pdf);
     if (r) RN.downloadPdf(r, b);
+  });
+  document.addEventListener('click', (e) => { // the spotlight's "Interactive walkthrough" button
+    const b = e.target.closest('[data-walk]');
+    const r = b && allReleases.find((x) => x.version === b.dataset.walk);
+    if (r) RN.openWalkthrough(r);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !e.metaKey && !e.ctrlKey) {

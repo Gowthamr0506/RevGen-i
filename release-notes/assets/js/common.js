@@ -66,6 +66,17 @@
       .catch(() => { announce('The PDF could not be created. Try again.'); button.textContent = 'PDF failed. Try again'; restore(3500); });
   }
 
+  /* ---------- interactive walkthrough ----------
+     The build marks a release with derived.walk (its number of stops) when it has sections, steps or screenshots to walk through and
+     does not link a walkthrough of its own. The viewer (assets/js/walkthrough-ui.mjs) is only fetched when someone opens it. */
+  const walkAvailable = (r) => !!r && r.page !== 'custom' && (r.derived && r.derived.walk) > 0 && location.protocol !== 'file:' && !!SELF
+    && typeof HTMLDialogElement !== 'undefined';
+  function openWalkthrough(release, options) {
+    return import(new URL('walkthrough-ui.mjs', SELF).href)
+      .then((lib) => lib.openWalkthrough(Object.assign({ entry: release, siteRoot: siteRoot() }, options)))
+      .catch(() => { announce('The walkthrough could not be opened. Try again.'); });
+  }
+
   // Mark the header link that points at this page (links with a #hash are anchors, not pages).
   document.querySelectorAll('.nav-links a').forEach((a) => {
     const u = new URL(a.getAttribute('href'), location.href);
@@ -73,5 +84,5 @@
   });
   reveal();
 
-  window.RN = { root, CATS, TYPES, esc, order, fmtDate, catById, loadReleases, reveal, includeDrafts, reduceMotion, pdfAvailable, downloadPdf };
+  window.RN = { root, CATS, TYPES, esc, order, fmtDate, catById, loadReleases, reveal, includeDrafts, reduceMotion, pdfAvailable, downloadPdf, walkAvailable, openWalkthrough };
 })();
